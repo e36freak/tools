@@ -1,0 +1,50 @@
+#!/bin/bash
+
+shopt -s nullglob extglob
+
+noclobber() {
+  local out=$1 i=0
+  
+  if [[ $out = *+([^/]).*([^/]) ]]; then
+    local base=${1%.*} ext=${1##*.}
+
+    while [[ -e $out ]]; do
+      out=$base.$((++i)).$ext
+    done
+  else
+    while [[ -e $out ]]; do
+      out=$1.$((++i))
+    done
+  fi
+
+  printf '%s\n' "$new"
+}
+
+files=("${@:1:$#-1}")
+target="${!#}"
+
+if [[ -d $target ]]; then
+  for f in "${files[@]}"; do
+    [[ -e $f ]] || {
+      echo "$f does not exist, skipping" >&2
+      continue
+    }
+
+    cp "$f" "$(noclobber "$target/$f")" || {
+      echo "error copying $f to $target/$f, skipping" >&2
+      continue
+    }
+  done
+else
+  for f in "${files[@]}"; do
+    [[ -e $f ]] || {
+      echo "$f does not exist, skipping" >&2
+      continue
+    }
+
+    cp "$f" "$(noclobber "$target")" || {
+      echo "error copying $f to $target/$f, skipping" >&2
+      continue
+    }
+  done
+fi

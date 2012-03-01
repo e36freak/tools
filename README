@@ -1,0 +1,27 @@
+args:
+  prints command line arguments given in a very readable format
+
+fah-stats:
+  parses the FAH log and gives useful information
+
+fib:
+  prints the Nth number of the fibonacci sequence
+
+flatten:
+  flattens a directory (recursively moves all files in sub-dirs to the current
+  dir, and deletes the sub-dirs)
+  (work in progress)
+
+mycp:
+  copies files. instead of erring or overwriting, appends numbers to dups
+  (work in progress)
+
+myunlink:
+  does a call to unlink(2), prints errno and strerr(errno) if it errs
+
+newscript:
+  creates a new script, adding the shebang and other things for you. see 
+  newscript --help or usage() in the source code
+
+seg:
+  segfaults. for testing purposes.

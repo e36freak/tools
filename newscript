@@ -1,0 +1,147 @@
+#!/bin/bash
+
+shopt -s extglob nullglob
+
+nc=0
+cron=0
+fullshebang=0
+lang=bash
+edit=0
+toedit=()
+
+die() {
+  printf '%s\n' "$@"
+  exit 1
+} >&2
+
+err() {
+  printf '%s\n' "$@"
+} >&2
+
+editor() {
+  if [[ $VISUAL ]]; then
+    $VISUAL "$@"
+  else
+    ${EDITOR:-vi} "$@"
+  fi
+}
+
+noclobber() {
+  local new=$1 i=0
+  while [[ -e $new ]]; do
+    new=$1$((++i))
+  done
+  printf '%s\n' "$new"
+}
+
+usage() {
+cat <<'EOF'
+newscript [options] name [name2 ... nameN]
+
+ Options:
+  -h, --help              display this help and exit
+  -l, --language <lang>   specify the language <lang>, default is bash
+  -s, --shebang <shebang> provide the entire shebang as an arg
+  -c,  --cron             add a your current PATH to the beginning of the script
+                          » only available with bash
+  -n, --no-clobber        prepends a number to the end of each existing <name>
+                          instead of erring
+  -e, --edit              open created files in a text editor
+
+ Available languages for <lang> are:
+  bash, awk, sed, perl, python
+EOF
+}
+
+while (($#)); do
+  case $1 in
+    -[!-]?*)
+      for ((i=1; i<${#1}; i++)); do
+        options+=("-${1:i:1}")
+      done
+      ;;
+    --?*=*) options+=("${1%%=*}" "${1#*=}");;
+    --) options+=(--endopts);;
+    *) options+=("$1");;
+  esac
+  shift
+done
+set -- "${options[@]}"
+
+while [[ $1 = -* ]]; do
+  case $1 in
+    -c|--cron) cron=1;;
+    -n|--no-clobber) nc=1;;
+    -l|--language)
+      [[ $2 ]] || die "argument required for $1"
+      case $2 in
+        bash|awk|sed|perl|python) lang=$2;;
+        *) die "$2 is not an available preset language";;
+      esac
+      shift
+      ;;
+    -s|--shebang)
+      [[ $2 ]] || die "argument required for $1"
+      fullshebang=1
+      shebang=$2
+      shift
+      ;;
+    -e|--edit) edit=1;;
+    --endopts) shift; break;;
+    -h|--help) usage; exit 0;;
+    *) die "invalid option: $1";;
+  esac
+  shift
+done
+
+(($#)) || die "no targets specified"
+
+if ((cron)) && {
+    { ((fullshebang)) && [[ $shebang != */bash!(/) ]]; } || 
+    [[ $lang != bash ]]; }; then
+  die "cron option is only available for bash"
+fi
+
+if ((fullshebang)); then
+  case $shebang in
+    */bash!(/)) lang=bash;;
+    */perl!(/)) lang=perl;;
+  esac
+else
+  case $lang in
+    bash) shebang='#!/bin/bash';;
+    awk) shebang='#!/bin/awk -f';;
+    sed) shebang='#!/bin/sed -f';;
+    perl) shebang='#!/usr/bin/perl';;
+    python) shebang='#!/usr/bin/python';;
+  esac
+fi
+
+for file; do
+  if [[ -e $file ]]; then
+    if ((nc)); then
+      file=$(noclobber "$file")
+    else
+      err "$file already exists"
+      continue
+    fi
+  fi
+
+  {
+    printf '%s\n\n' "$shebang"
+    case $lang in
+      bash)
+        printf '%s\n\n' 'shopt -s extglob nullglob'
+        ((cron)) && printf 'PATH=%s\n\n' "$PATH"
+        ;;
+      perl)
+        printf '%s\n%s\n\n' 'use warnings;' 'use strict;'
+        ;;
+    esac
+  } > "$file"
+
+  chmod +x "$file" || err "error making $file executable"
+  toedit+=("$file")
+done
+
+((edit)) && editor "${toedit[@]}"

@@ -1,0 +1,24 @@
+#!/bin/bash
+
+dir=${1:-.}
+
+find "$dir" -depth \( -type l -exec bash -c '
+    f=${1##*/} t=$f i=0
+    lt=$(readlink -f "$1") || {
+      echo "error following \"$1\"" >&2
+      exit 1
+    }
+    while [[ -e $2/$t ]]; do
+      t=$f.$((++i))
+    done
+    ln -s "$lt" "$2/$t" && rm "$1"
+  ' {} "$dir" \; \) \
+  -o \( -type d -exec rmdir {} \; \) \
+  -o -exec bash -c '
+    f=${1##*/} t=$f i=0
+    while [[ -e $2/$t ]]; do
+      t=$f.$((++i))
+    done
+    mv "$1" "$2/$t"
+  ' {} "$dir" \; 
+
