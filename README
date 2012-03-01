@@ -25,3 +25,6 @@ newscript:
 
 seg:
   segfaults. for testing purposes.
+
+TODO:
+  extend mycp and flatten, and fix bugs
