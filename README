@@ -26,5 +26,8 @@ newscript:
 seg:
   segfaults. for testing purposes.
 
+url_encode:
+  uses libcurl to escape a given URL. must be compiled with -lcurl
+
 TODO:
   extend mycp and flatten, and fix bugs
