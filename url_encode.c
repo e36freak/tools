@@ -36,8 +36,8 @@ int main(int argc, char *argv[]) {
     sprintf(out, "%s/%s", out, curl_easy_escape(NULL, cur, 0));
   }
 
+  /* print the damn thing */
   printf("%s\n", out);
-
 
   return 0;
 }
