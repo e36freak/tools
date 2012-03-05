@@ -1,0 +1,387 @@
+#!/bin/bash
+
+# TODO:
+#   finish the damn thing
+#   add --quiet and --force-progress
+#   by default, only display progress when using -e
+#   support for more sites
+#   possible option to use uname/passwd
+
+# vim for bash:
+# vim +'let g:is_bash=1' +'set syn=sh'
+
+# set shopts and initialize vars
+shopt -s extglob nullglob
+editor=0
+hasconfig=1
+removeCRs=0
+toadd=0
+usefile=0
+config=${XDG_HOME_CONFIG:-$HOME/.config}/read_paste/syntaxes.conf
+default_config=http://andromeda.kiwilight.com/syntaxes.conf
+unset outfile
+unset syn
+unset url
+unset syns
+# always make "$syn" lowercase for pattern matching purposes
+declare -l syn
+
+declare -A syns
+declare -A vim_syns
+vims=(/usr/share/vim/vim73/syntax/*.vim "$HOME"/.vim/syntax/*.vim)
+for s in "${vims[@]}"; do
+  s=${s##*/} s=${s%.vim}
+  vim_syns[$s]=1
+done
+unset vims
+
+tmp_files=()
+
+# usage: add_syn SYN LANG
+# add syntax to the configuration file
+add_syn() {
+  local tmp s=$1 lang=${2%.vim}
+
+  if ((! vim_syns[$lang])); then
+    err "$lang is not a valid vim syn value, cannot add $syn"
+    return 1
+  fi
+
+  if ! tmp=$(mktemp --tmpdir paste.XXXXXXXX); then
+    err "error creating temp file, cannot add syntaxes"
+    return 1
+  fi
+  tmp_files+=("$tmp")
+
+  if ! read_config; then
+    err "cannot add syntaxes to config file"
+    return 1
+  fi
+
+  printf '%s:%s\n' "$s" "$lang" | awk -F : -v OFS=: '
+    {
+      s[$1] = $2;
+    }
+
+    END {
+      sort = "sort -t : -k 2,2"
+      for (i in s) {
+        print i, s[i] | sort;
+      }
+      close(sort);
+    }
+  ' "$config" - > "$tmp" && mv "$tmp" "$config"
+}
+
+# stuff to run on exit
+cleanup() {
+  rm -f "${tmp_files[@]}"
+}
+
+# print error and exit
+die() {
+  printf '%s\n' "$@"
+  exit 1
+} >&2
+
+# usage: edit FILE
+# set options for vim based on "$syn" and "$usefile", and use it to open FILE
+edit() {
+  local vim=(vim)
+  [[ -f $1 && -r $1 ]] || return
+
+  ((usefile)) || vim+=(-r)
+
+  # if syn is empty, just open the file
+  if [[ -z $syn ]]; then
+    "${vim[@]}" "$1"
+    return
+  fi
+
+  # validate syn
+  if [[ -z ${syns[$syn]} ]]; then
+    err "invalid syntax: $syn"
+    "${vim[@]}" "$1"
+    return
+  fi
+  
+  # for bash, vim needs a special variable set
+  [[ $syn = bash ]] && vim+=(+'let g:is_bash=1')
+
+  "${vim[@]}" +"set syn=${syns[$syn]}" "$1"
+}
+
+# print error without exiting
+err() {
+  printf '%s\n' "$@"
+} >&2
+
+# usage: fetch URL FILE
+# download URL and write to FILE, removing CRs if needed
+fetch() {
+  if ((removeCRs)); then
+    if [[ $2 != - ]]; then
+      curl -# "$1" | tr -d '\r' > "$2"
+    else
+      curl -# "$1" | tr -d '\r'
+    fi
+  else
+    curl -# -o "$2" "$1"
+  fi
+}
+
+# list available syntaxes
+list_syns() {
+  awk -F: '
+    BEGIN {
+      max = length("Language");
+    }
+
+    {
+      s[$1] = $2;
+      if ((l = length($1)) > max) {
+        max = l;
+      }
+    }
+
+    END {
+      sort = "sort -t : -k 2,2"
+      printf("%-*s: %s\n", max, "Language", "Vim syn value");
+      for (i in s) {
+        printf("%-*s: %s\n", max, i, s[i]) | sort;
+      }
+      close(sort);
+    }
+  ' "$config"
+}
+
+# determines config file's existence, prompts for download if it does not exist
+# then reads the contents of the file into the syns array
+read_config() {
+  local s lang line
+  # make sure syntax file exists
+  mkdir -p "${config%/*}" || die "could not create config dir"
+
+  if [[ ! -f $config ]]; then
+    if yesno 'no config file found, download a default?'; then
+      curl -# -o "$config" "$default_config" || die "error downloading"
+    else
+      err "continuing without config"
+      return 1
+    fi
+  elif [[ ! -r $config ]]; then
+    err "cannot read config file"
+    return 1
+  fi
+
+  # read syntaxes in the config file into the syns array
+  # key is syntax name, value is vim's syn= value
+  while read -r line; do
+    IFS=: read -r s lang <<<"$line"
+
+    if ((! vim_syns[$lang])); then
+      err "$lang.vim does not exist in vim's syntaxes"
+      continue
+    fi
+
+    syns[$s]=$lang
+  done <"$config"
+}
+
+# display usage info
+usage() {
+cat <<'EOF'
+read_paste [OPTIONS] URL
+
+Downloads URL, getting the raw format for the supported pastebins. If URL is
+not one of the supported pastebins, it is treated as already being in a raw
+format. Normally writes to stdout, unless -e or --editor is used.
+
+ Options:
+  -h, --help            display this help and exit
+  -e, --editor          opens file with vim after downloading
+  -H, --highlight SYN   when using the -e or --editor option, tells vim
+                        what the filetype is for syntax highlighting. while this
+                        program will automatically try to get this information
+                        from the site, doing so will not always be possible.
+                        this option will override any information acquired from
+                        the site.
+  -a, --add SYN=LANG    add SYN to the configuration file. LANG must be a *.vim
+                        file in your vim's VIMRUNTIME or in ~/.vim/syntax. the
+                        .vim on the file may be omitted. This option can be
+                        used multiple times, to add multiple syntaxes
+  -l, --list            list available values for SYN and exit
+  -r, --remove-cr       force removal of carriage returns (ASCII 13) from
+                        downloaded files
+  -f, --file FILE       if -e is not used, write to FILE instead of stdout. if
+                        -e is used, use FILE instead of a temp file
+
+Valid syntaxes for -H are stored in:
+  "${XDG_CONFIG_HOME:-$HOME/.config}/read_paste/syntaxes.conf"
+
+Currently supported pastebins:
+  pastebin.com (will automatically remove CRs)
+  sprunge.us
+EOF
+}
+
+# print yes or no prompt, return accordingly
+yesno() {
+  local -l reply    # convert to lcase on assignment
+
+  # make sure stdin is a tty
+  [[ -t 0 ]] || exec </dev/tty
+
+  read -p "$1 [Y/n] " reply >/dev/tty
+  [[ -z $reply || $reply = y?(es) ]]
+}
+
+# clean up stuff when the script exits
+trap 'cleanup' EXIT
+
+# iterate over options, breaking -ab into -a -b and --foo=bar into --foo bar
+# also turns -- into --endopts to avoid issues with things like wget -O-
+unset options
+while (($#)); do
+  case $1 in
+    # if option is of type -ab
+    -[!-]?*)
+      # loop over each character starting with the second
+      for ((i=1; i<${#1}; i++)); do
+        c=${1:i:1}
+
+        # if it's a dash, like -O-, then
+        if [[ $c = - ]]; then
+          options+=("$c")
+        # otherwise, just append -a, -b, etc to options
+        else
+          options+=("-$c")
+        fi
+      done
+      ;;
+    # if option is of type --foo=bar, split on first '='
+    --?*=*) options+=("${1%%=*}" "${1#*=}");;
+    # add --endopts for --
+    --) options+=(--endopts);;
+    # otherwise, nothing special
+    *) options+=("$1");;
+  esac
+
+  shift
+done
+# set new positional parameters to altered options
+set -- "${options[@]}"
+unset options
+
+# actually parse the options and do stuff
+while [[ $1 = -?* ]]; do
+  case $1 in
+    -e|--editor) editor=1;;
+    -H|--highlight)
+      [[ $2 ]] || die "no language provided for $1"
+      syn=$2
+      shift
+      ;;
+    -a|--add)
+      [[ $2 ]] || die "nothing to add for $1"
+      [[ $2 = *=* ]] || die "$2: not a valid format, must be SYN=LANG"
+      add_syn "${2%%=*}" "${2#*=}"
+      toadd=1
+      shift
+      ;;
+    -l|--list) list_syns; exit;;
+    -r|--remove-cr) removeCRs=1;;
+    -f|--file)
+      usefile=1
+      [[ $2 ]] || die "no FILE specified for $1"
+      [[ -e $2 ]] && die "$2 exists"
+      outfile=$2
+      shift
+      ;;
+    -h|--help) usage; exit 0;;
+    --endopts) shift; break;;
+    *) die "invalid option: $1";;
+  esac
+
+  shift
+done
+
+# make sure URL is provided
+if [[ $1 ]]; then
+  url=${1#http?(s)://?(www.)}
+else
+  die "no URL provided"
+fi
+
+# set syns array if editor is to be invoked
+if ((editor)); then 
+  if ! read_config; then
+    err "syntax highlighting will not be enabled"
+    unset syn
+  fi
+fi
+
+### determine website, and do stuff accordingly
+
+case $url in
+  # sprunge.us
+  sprunge.us/*)
+    # is syntax highlighting given?
+    if [[ $url = */+([!/])\?+([!/]) ]]; then
+      # if syn is not set, use whatever the URL says
+      [[ -z $syn ]] && syn=${url##*\?}
+      # use the URL without the syntax bit as the raw
+      url=${url%%\?*}
+    fi
+    ;;
+
+  # pastebin.com
+  pastebin.com/*)
+    # if URL is already raw, convert to normal
+    if [[ $url = "pastebin.com/raw.php?i="* ]]; then
+      url=pastebin.com/${url##*"/raw.php?i="}
+    fi
+
+    # determine syntax
+    if ((editor)) && [[ -z $syn ]]; then
+      syn=$(curl -s "http://$url" | tr -d '\r' | awk -F '[<>]' '
+        /div class="paste_box_line2"/ {
+          for (i=1; i<=NF; i++) {
+            if ($i ~ /^a href="\/archive/) {
+              lang = $i;
+              gsub(/^a href="\/archive\/|"$/, "", lang);
+              print lang == "text" ? "" : lang;
+              f = 1;
+            }
+          }
+        }
+      ') 
+    fi
+
+    # convert back to raw url
+    url=pastebin.com/raw.php?i=${url##*/}
+    ;;
+esac
+
+# if editor is to be used..
+if ((editor)); then
+  if ((usefile)); then
+    fetch "$url" "$outfile" || die "error downloading $url"
+    edit "$outfile"
+  else
+    # create temp file to download to
+    tmp=$(mktemp --tmpdir paste.XXXXXXXX) || die "could not create temp file"
+    tmp_files+=("$tmp")
+
+    # download raw url to tmp, and open with vim
+    fetch "$url" "$tmp" || die "error downloading $url"
+    edit "$tmp"
+  fi
+else
+  if ((usefile)); then
+    fetch "$url" "$outfile" || die "error downloading $url"
+  else
+    # download raw url and write to stdout
+    fetch "$url" - || die "error downloading $url"
+  fi
+fi
