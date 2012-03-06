@@ -9,7 +9,7 @@
 #   possible option to use uname/passwd
 #   support for more sites
 #   ideas:
-#     fpaste, gist.github, codepad.org, pastebin.ca, dpaste, ubuntu
+#     pastie.org, fpaste, gist.github, codepad.org, pastebin.ca, dpaste, ubuntu
 
 # vim for bash:
 # vim +'let g:is_bash=1' +'set syn=sh'
@@ -22,7 +22,7 @@ removeCRs=0
 toadd=0
 usefile=0
 config=${XDG_HOME_CONFIG:-$HOME/.config}/read_paste/syntaxes.conf
-default_config=http://andromeda.kiwilight.com/syntaxes.conf
+default_config=http://auriga.kiwilight.com/~freak/read_paste/syntaxes.conf
 unset outfile
 unset syn
 unset url
@@ -93,8 +93,6 @@ die() {
 edit() {
   local vim=(vim)
   [[ -f $1 && -r $1 ]] || return
-
-  ((usefile)) || vim+=(-r)
 
   # don't bother with syn if there's a shebang
   [[ $(head -c 2 "$1") = \#! ]] && unset syn
@@ -325,8 +323,11 @@ fi
 ### determine website, and do stuff accordingly
 
 case $url in
-  # sprunge.us
+  # sprunge
   sprunge.us/*)
+    # remove the numbering from the url, if there
+    url=${url%%#*}
+
     # is syntax highlighting given?
     if [[ $url = */+([!/])\?+([!/]) ]]; then
       # if syn is not set, use whatever the URL says
@@ -362,6 +363,8 @@ case $url in
 
     removeCRs=1
     ;;
+
+  # pocoo
   paste.pocoo.org/*)
     # if URL is already raw, convert to normal
     if [[ $url = paste.pocoo.org/raw/* ]]; then
