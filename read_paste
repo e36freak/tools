@@ -2,10 +2,14 @@
 
 # TODO:
 #   finish the damn thing
+#   add languages to config file
+#     add more info on how to use config file
 #   add --quiet and --force-progress
 #   by default, only display progress when using -e
-#   support for more sites
 #   possible option to use uname/passwd
+#   support for more sites
+#   ideas:
+#     fpaste, gist.github, codepad.org, pastebin.ca, dpaste, ubuntu
 
 # vim for bash:
 # vim +'let g:is_bash=1' +'set syn=sh'
@@ -92,19 +96,15 @@ edit() {
 
   ((usefile)) || vim+=(-r)
 
-  # if syn is empty, just open the file
-  if [[ -z $syn ]]; then
+  # don't bother with syn if there's a shebang
+  [[ $(head -c 2 "$1") = \#! ]] && unset syn
+    
+  # if syn is empty or unknown, just open the file
+  if [[ -z $syn || -z ${syns[$syn]} ]]; then
     "${vim[@]}" "$1"
     return
   fi
 
-  # validate syn
-  if [[ -z ${syns[$syn]} ]]; then
-    err "invalid syntax: $syn"
-    "${vim[@]}" "$1"
-    return
-  fi
-  
   # for bash, vim needs a special variable set
   [[ $syn = bash ]] && vim+=(+'let g:is_bash=1')
 
@@ -222,6 +222,7 @@ Valid syntaxes for -H are stored in:
 Currently supported pastebins:
   pastebin.com (will automatically remove CRs)
   sprunge.us
+  paste.pocoo.org
 EOF
 }
 
@@ -345,22 +346,36 @@ case $url in
     # determine syntax
     if ((editor)) && [[ -z $syn ]]; then
       syn=$(curl -s "http://$url" | tr -d '\r' | awk -F '[<>]' '
-        /div class="paste_box_line2"/ {
-          for (i=1; i<=NF; i++) {
-            if ($i ~ /^a href="\/archive/) {
-              lang = $i;
-              gsub(/^a href="\/archive\/|"$/, "", lang);
-              print lang == "text" ? "" : lang;
-              f = 1;
-            }
+      /div class="paste_box_line2"/ {
+        for (i=1; i<=NF; i++) {
+          if ($i ~ /^a href="\/archive/) {
+            gsub(/^a href="\/archive\/|"$/, "", $i);
+            print $i;
           }
         }
-      ') 
+        exit;
+      }') 
     fi
 
-    # convert back to raw url
+    # convert to raw url
     url=pastebin.com/raw.php?i=${url##*/}
+
+    removeCRs=1
     ;;
+  paste.pocoo.org/*)
+    # if URL is already raw, convert to normal
+    if [[ $url = paste.pocoo.org/raw/* ]]; then
+      url=paste.pocoo.org/show/${url##*/}
+    fi
+
+    # determine syntax
+    if ((editor)) && [[ -z $syn ]]; then
+      syn=$(curl -s "http://$url" | 
+        sed -n 's/.*<div id="paste" class="lang-\([^[:blank:]]*\) code">.*/\1/p')
+    fi
+
+    # convert to raw url
+    url=paste.pocoo.org/raw/${url##*/}
 esac
 
 # if editor is to be used..
