@@ -23,10 +23,6 @@ newscript:
   creates a new script, adding the shebang and other things for you. see 
   newscript --help or usage() in the source code
 
-read_paste:
-  downloads a URL, getting the raw format for any of the supported pastebins.
-  see read_paste --help or usage() in the source code.
-
 seg:
   segfaults. for testing purposes.
 
