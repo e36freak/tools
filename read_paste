@@ -9,7 +9,7 @@
 #   possible option to use uname/passwd
 #   support for more sites
 #   ideas:
-#     pastie.org, fpaste, gist.github, codepad.org, pastebin.ca, dpaste, ubuntu
+#     fpaste, gist.github, codepad.org, pastebin.ca, dpaste, ubuntu
 
 # vim for bash:
 # vim +'let g:is_bash=1' +'set syn=sh'
@@ -40,6 +40,10 @@ done
 unset vims
 
 tmp_files=()
+
+# possible span class prefixes for pastie.org's syntax highlighting
+pastie_prefs=(meta comment function entity string
+              storage variable keyword invalid)
 
 # usage: add_syn SYN LANG
 # add syntax to the configuration file
@@ -104,7 +108,9 @@ edit() {
   fi
 
   # for bash, vim needs a special variable set
-  [[ $syn = bash ]] && vim+=(+'let g:is_bash=1')
+  case $syn in
+    bash|shell) vim+=(+'let g:is_bash=1');;
+  esac
 
   "${vim[@]}" +"set syn=${syns[$syn]}" "$1"
 }
@@ -219,8 +225,9 @@ Valid syntaxes for -H are stored in:
 
 Currently supported pastebins:
   pastebin.com (will automatically remove CRs)
-  sprunge.us
   paste.pocoo.org
+  pastie.org
+  sprunge.us
 EOF
 }
 
@@ -323,20 +330,6 @@ fi
 ### determine website, and do stuff accordingly
 
 case $url in
-  # sprunge
-  sprunge.us/*)
-    # remove the numbering from the url, if there
-    url=${url%%#*}
-
-    # is syntax highlighting given?
-    if [[ $url = */+([!/])\?+([!/]) ]]; then
-      # if syn is not set, use whatever the URL says
-      [[ -z $syn ]] && syn=${url##*\?}
-      # use the URL without the syntax bit as the raw
-      url=${url%%\?*}
-    fi
-    ;;
-
   # pastebin.com
   pastebin.com/*)
     # if URL is already raw, convert to normal
@@ -359,7 +352,7 @@ case $url in
     fi
 
     # convert to raw url
-    url=pastebin.com/raw.php?i=${url##*/}
+    url=${url%/} url=pastebin.com/raw.php?i=${url##*/}
 
     removeCRs=1
     ;;
@@ -378,7 +371,62 @@ case $url in
     fi
 
     # convert to raw url
-    url=paste.pocoo.org/raw/${url##*/}
+    url=${url%/} url=paste.pocoo.org/raw/${url##*/}
+    ;;
+
+  # pastie
+  pastie.org/*)
+    # if URL is raw or download, convert to normal
+    if [[ $url = pastie.org/pastes/* ]]; then
+      num=${url##*/pastes/} num=${num%/*}
+      url=pastie.org/$num
+    fi
+
+    # attempt to get the language
+    if ((editor)) && [[ -z $syn ]]; then
+      syn=$(curl -s "http://$url" |
+        awk -F '[<>]' -v q=\' '
+          FNR == NR {
+            prefs[$0];
+            next;
+          }
+
+          /<span class=/ {
+            for (i=1; i<=NF; i++) {
+              if ($i ~ /^span class=/) {
+                split($i, a, q);
+                blen = split(a[2], b, /[[:blank:]]+/);
+                if (!(b[1] in prefs)) {
+                  continue;
+                }
+
+                clen = split(b[blen], c, /_/);
+                print c[clen];
+                exit;
+              }
+            }
+          }
+        ' <(printf '%s\n' "${pastie_prefs[@]}") -
+      )
+    fi
+
+    # convert to raw
+    url=${url%/} url=pastie.org/pastes/${url##*/}/text
+    ;;
+
+  # sprunge
+  sprunge.us/*)
+    # remove the numbering from the url, if there
+    url=${url%%#*}
+
+    # is syntax highlighting given?
+    if [[ $url = */+([!/])\?+([!/]) ]]; then
+      # if syn is not set, use whatever the URL says
+      [[ -z $syn ]] && syn=${url##*\?}
+      # use the URL without the syntax bit as the raw
+      url=${url%%\?*}
+    fi
+    ;;
 esac
 
 # if editor is to be used..
