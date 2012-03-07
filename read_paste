@@ -9,10 +9,7 @@
 #   possible option to use uname/passwd
 #   support for more sites
 #   ideas:
-#     fpaste, gist.github, codepad.org, pastebin.ca, dpaste, ubuntu
-
-# vim for bash:
-# vim +'let g:is_bash=1' +'set syn=sh'
+#     fpaste, codepad.org, pastebin.ca, dpaste, ubuntu
 
 # set shopts and initialize vars
 shopt -s extglob nullglob
@@ -224,6 +221,7 @@ Valid syntaxes for -H are stored in:
   "${XDG_CONFIG_HOME:-$HOME/.config}/read_paste/syntaxes.conf"
 
 Currently supported pastebins:
+  gist.github.com
   pastebin.com (will automatically remove CRs)
   paste.pocoo.org
   pastie.org
@@ -315,6 +313,7 @@ done
 # make sure URL is provided
 if [[ $1 ]]; then
   url=${1#http?(s)://?(www.)}
+  surl=${1%"$url"}
 else
   die "no URL provided"
 fi
@@ -330,6 +329,26 @@ fi
 ### determine website, and do stuff accordingly
 
 case $url in
+  # gist
+  gist.github.com/*)
+    # if url is raw, convert to normal
+    if [[ $url = "gist.github.com/raw"/* ]]; then
+      url=${url##*/raw/} url=${url%%/*}
+      url=gist.github.com/$url
+    fi
+
+    src=$(curl -s "$surl$url")
+
+    # determine syntax
+    if ((editor)) && [[ -z $syn ]]; then
+      syn=$(sed -n 's/.*<div class="data type-\([^"]*\).*/\1/p' <<<"$src")
+    fi
+
+    # get raw URL from source
+    url=$(sed -n 's|.*<a href="\(/raw/[^"]*\)">raw</a>.*|\1|p' <<<"$src")
+    url=gist.github.com$url
+    ;;
+
   # pastebin.com
   pastebin.com/*)
     # if URL is already raw, convert to normal
@@ -339,7 +358,7 @@ case $url in
 
     # determine syntax
     if ((editor)) && [[ -z $syn ]]; then
-      syn=$(curl -s "http://$url" | tr -d '\r' | awk -F '[<>]' '
+      syn=$(curl -s "$surl$url" | tr -d '\r' | awk -F '[<>]' '
       /div class="paste_box_line2"/ {
         for (i=1; i<=NF; i++) {
           if ($i ~ /^a href="\/archive/) {
@@ -366,7 +385,7 @@ case $url in
 
     # determine syntax
     if ((editor)) && [[ -z $syn ]]; then
-      syn=$(curl -s "http://$url" | 
+      syn=$(curl -s "$surl$url" | 
         sed -n 's/.*<div id="paste" class="lang-\([^[:blank:]]*\) code">.*/\1/p')
     fi
 
@@ -384,7 +403,7 @@ case $url in
 
     # attempt to get the language
     if ((editor)) && [[ -z $syn ]]; then
-      syn=$(curl -s "http://$url" |
+      syn=$(curl -s "$surl$url" |
         awk -F '[<>]' -v q=\' '
           FNR == NR {
             prefs[$0];
@@ -432,7 +451,7 @@ esac
 # if editor is to be used..
 if ((editor)); then
   if ((usefile)); then
-    fetch "$url" "$outfile" || die "error downloading $url"
+    fetch "$surl$url" "$outfile" || die "error downloading $surl$url"
     edit "$outfile"
   else
     # create temp file to download to
@@ -440,14 +459,14 @@ if ((editor)); then
     tmp_files+=("$tmp")
 
     # download raw url to tmp, and open with vim
-    fetch "$url" "$tmp" || die "error downloading $url"
+    fetch "$surl$url" "$tmp" || die "error downloading $surl$url"
     edit "$tmp"
   fi
 else
   if ((usefile)); then
-    fetch "$url" "$outfile" || die "error downloading $url"
+    fetch "$surl$url" "$outfile" || die "error downloading $surl$url"
   else
     # download raw url and write to stdout
-    fetch "$url" - || die "error downloading $url"
+    fetch "$surl$url" - || die "error downloading $surl$url"
   fi
 fi
