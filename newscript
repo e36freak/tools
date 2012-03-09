@@ -36,39 +36,56 @@ noclobber() {
 
 usage() {
 cat <<'EOF'
-newscript [options] name [name2 ... nameN]
+newscript [OPTIONS] NAME [...]
 
  Options:
   -h, --help              display this help and exit
-  -l, --language <lang>   specify the language <lang>, default is bash
-  -s, --shebang <shebang> provide the entire shebang as an arg
+  -l, --language LANG     specify the language LANG, default is bash
+  -s, --shebang SHEBANG   provide the entire shebang as an arg, SHEBANG
   -c,  --cron             add a your current PATH to the beginning of the script
                           » only available with bash
-  -n, --no-clobber        prepends a number to the end of each existing <name>
+  -n, --no-clobber        prepends a number to the end of each existing NAME
                           instead of erring
   -e, --edit              open created files in a text editor
 
- Available languages for <lang> are:
+ Available languages for LANG are:
   bash, awk, sed, perl, python
 EOF
 }
 
+# iterate over options breaking -ab into -a -b when needed and
+# --foo=bar into --foo bar
+optstring=hl:s:cne
 while (($#)); do
   case $1 in
+    # if option is of type -ab
     -[!-]?*)
       for ((i=1; i<${#1}; i++)); do
-        options+=("-${1:i:1}")
+        c=${1:i:1}
+
+        if [[ $optstring = *"$c":* ]]; then
+          options+=(-"$c" "${1:2}")
+          break
+        else
+          options+=(-"$c")
+        fi
       done
       ;;
+
+    # if option is of type --foo=bar, split on first '='
     --?*=*) options+=("${1%%=*}" "${1#*=}");;
-    --) options+=(--endopts);;
+
+    # otherwise, nothing special
     *) options+=("$1");;
   esac
+
   shift
 done
+# reset "$@" to "${options[@]}"
 set -- "${options[@]}"
+unset options
 
-while [[ $1 = -* ]]; do
+while [[ $1 = -?* ]]; do
   case $1 in
     -c|--cron) cron=1;;
     -n|--no-clobber) nc=1;;
