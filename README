@@ -29,5 +29,8 @@ seg:
 url_encode:
   uses libcurl to escape a given URL. must be compiled with -lcurl
 
+url_decode:
+  uses libcurl to decode a given URL. must be compiled with -lcurl
+
 TODO:
   extend mycp and flatten, and fix bugs
