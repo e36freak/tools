@@ -26,6 +26,9 @@ newscript:
 seg:
   segfaults. for testing purposes.
 
+sub:
+  substitutes STR for REP, treating them as literal strings
+
 url_encode:
   uses libcurl to escape a given URL. must be compiled with -lcurl
 

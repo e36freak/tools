@@ -1,0 +1,172 @@
+#!/bin/bash
+
+global=0
+in_place=0
+temps=()
+
+# usage: sub_literal STR REP
+# Replaces the first instance (on each line) of STR with REP, treating them as
+# literal strings and not regexes. Reads stdin and writes to stdout.
+sub_literal() {
+  # string manip needed to escape '\'s, so awk doesn't expand '\n' and such
+  awk -v str="${1//\\/\\\\}" -v rep="${2//\\/\\\\}" '
+    # get the length of the search string
+    BEGIN {
+      len = length(str);
+    }
+
+    # if the search string is in the line
+    (i = index($0, str)) {
+      # replace the first occurance with rep
+      $0 = substr($0, 1, i-1) rep substr($0, i + len);
+    }
+
+    # print each line
+    1
+  '
+}
+
+# usage: gsub_literal STR REP
+# Replaces all instances of STR with REP, treating them as literal strings 
+# and not regexes. Reads stdin and writes to stdout
+gsub_literal() {
+  # string manip needed to escape '\'s, so awk doesn't expand '\n' and such
+  awk -v str="${1//\\/\\\\}" -v rep="${2//\\/\\\\}" '
+    # get the length of the search string
+    BEGIN {
+      len = length(str);
+    }
+
+    {
+      # empty the output string
+      out = "";
+
+      # continue looping while the search string is in the line
+      while (i = index($0, str)) {
+        # append everything up to the search string, and the replacement string
+        out = out substr($0, 1, i-1) rep;
+
+        # remove everything up to and including the first instance of the
+        # search string from the line
+        $0 = substr($0, i + len);
+      }
+
+      # append whatever is left
+      out = out $0;
+
+      print out;
+    }
+  '
+}
+
+# usage: do_sub STR REP
+# calls sub_literal or gsub_literal based on the "$global" variable
+do_sub() {
+  if ((global)); then
+    gsub_literal "$@"
+  else
+    sub_literal "$@"
+  fi
+}
+
+usage() {
+cat <<'EOF'
+sub [OPTION] STR REP [FILE(s)]
+
+Replaces STR with REP in FILE(s), or stdin if no files are provided or a
+target filename is '-'.
+
+ Options:
+  -h, --help      display this help and exit
+  -g, --global    replaces all instances on each line, instead of just the first
+  -i, --in-place  edit FILE(s) in place, instead of printing to stdout. ignored
+                  for stdin.
+
+STR must be non-empty, but REP may be empty to replace STR with nothing.
+EOF
+}
+
+# option string, for short options.
+# very much like getopts, any option followed by a ':' takes a required arg
+optstring=hgi
+
+# iterate over options, breaking -ab into -a -b and --foo=bar into --foo bar
+# also turns -- into --endopts to avoid issues with things like wget -O-
+while (($#)); do
+  case $1 in
+    # if option is of type -ab
+    -[!-]?*)
+      # loop over each character starting with the second
+      for ((i=1; i<${#1}; i++)); do
+        c=${1:i:1}
+        
+        # add current char to options
+        options+=("-$c")
+
+        # if option takes a required argument, and it's not the last char
+        # make the rest of the string its argument
+        if [[ $optstring = *"$c:"* && ${1:i+1} ]]; then
+          options+=("${1:i+1}")
+          break
+        fi
+      done
+      ;;
+    # if option is of type --foo=bar, split on first '='
+    --?*=*) options+=("${1%%=*}" "${1#*=}");;
+    # add --endopts for --
+    --) options+=(--endopts);;
+    # otherwise, nothing special
+    *) options+=("$1");;
+  esac
+
+  shift
+done
+# set new positional parameters to altered options
+set -- "${options[@]}"
+unset options
+
+# actually parse the options and do stuff
+while [[ $1 = -?* ]]; do
+  case $1 in
+    -h|--help) usage; exit 0;;
+    -g|--global) global=1;;
+    -i|--in-place) in_place=1;;
+    --endopts) shift; break;;
+    *) die "invalid option: $1";;
+  esac
+
+  shift
+done
+
+[[ $1 ]] || die "no value for STR provided"
+str=$1
+[[ ${2+set} ]] || die "no value for REP provided"
+rep=$2
+shift 2
+
+((! $#)) || set -- -
+
+((in_place)) && trap 'rm -f "${temps[@]}"' EXIT
+
+for file; do
+  if [[ $file = - ]]; then
+    do_sub "$str" "$rep"
+    continue
+  fi
+
+  if ((in_place)); then
+    if ! [[ -f $file && -r $file && -w $file ]]; then
+      printf "%s does not exist or is not readable or writable" "$file" >&2
+      continue
+    fi
+
+    tmp=$(mktemp) && cp "$file" "$tmp" || die "could not create temp file"
+    temps+=("$tmp")
+
+    do_sub < "$tmp" > "$file"
+  else
+    do_sub < "$file"
+  fi
+done
+
+# vim: ft=sh syn=sh sw=2 sts=2 et
