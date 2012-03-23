@@ -144,7 +144,7 @@ str=$1
 rep=$2
 shift 2
 
-((! $#)) || set -- -
+(($#)) || set -- -
 
 ((in_place)) && trap 'rm -f "${temps[@]}"' EXIT
 
