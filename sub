@@ -82,7 +82,8 @@ target filename is '-'.
   -i, --in-place  edit FILE(s) in place, instead of printing to stdout. ignored
                   for stdin.
 
-STR must be non-empty, but REP may be empty to replace STR with nothing.
+STR must be non-empty, but REP may be empty to replace STR with nothing. (note
+that an argument is still required, but it may be the empty string)
 EOF
 }
 
