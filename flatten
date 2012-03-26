@@ -1,24 +1,135 @@
 #!/bin/bash
 
-dir=${1:-.}
+shopt -s extglob
 
-find "$dir" -depth \( -type l -exec bash -c '
-    f=${1##*/} t=$f i=0
-    lt=$(readlink -f "$1") || {
-      echo "error following \"$1\"" >&2
-      exit 1
-    }
-    while [[ -e $2/$t ]]; do
-      t=$f.$((++i))
-    done
-    ln -s "$lt" "$2/$t" && rm "$1"
-  ' {} "$dir" \; \) \
-  -o \( -type d -exec rmdir {} \; \) \
-  -o -exec bash -c '
-    f=${1##*/} t=$f i=0
-    while [[ -e $2/$t ]]; do
-      t=$f.$((++i))
-    done
-    mv "$1" "$2/$t"
-  ' {} "$dir" \; 
+# default behavior is to print confirmation prompt
+confirm=1
 
+# print error message and exit
+die() {
+  printf '%s\n' "$@" >&2
+  exit 1
+}
+
+# adds '.N' to a filename, sans extension, until it doesn't exist
+new_filename() {
+  local out=$1 i=0
+
+  if [[ $out = *+([^/]).*([^/]) ]]; then
+    local base=${1%.*} ext=${1##*.}
+
+    while [[ -e $out ]]; do
+      out=$base.$((++i)).$ext
+    done
+  else
+    while [[ -e $out ]]; do
+      out=$1.$((++i))
+    done
+  fi
+
+  printf '%s\n' "$out"
+}
+
+usage() {
+cat <<'EOF'
+flatten [OPTIONS] [DIR]
+
+Recursively moves all files in sub-directories to DIR (the current working
+directory if not provided), and deletes the empty sub-directories. Treats
+symbolic links as normal files, creating a new symlink in DIR.
+
+ Options:
+  -h, --help        Display this help and exit
+  -n, --no-confirm  Do not display a confirmation prompt
+EOF
+}
+
+# iterate over options, breaking -ab into -a -b and --foo=bar into --foo bar
+# also turns -- into --endopts to avoid issues with things like wget -O-
+while (($#)); do
+  case $1 in
+    # if option is of type -ab
+    -[!-]?*)
+      # loop over each character starting with the second
+      for ((i=1; i<${#1}; i++)); do
+        # add current char to options
+        options+=("-${1:i:1}")
+      done
+      ;;
+    # add --endopts for --
+    --) options+=(--endopts);;
+    # otherwise, nothing special
+    *) options+=("$1");;
+  esac
+
+  shift
+done
+# set new positional parameters to altered options
+set -- "${options[@]}"
+unset options
+
+# actually parse the options and do stuff
+while [[ $1 = -?* ]]; do
+  case $1 in
+    -h|--help) usage; exit 0;;
+    -n|--no-confirm) confirm=0;;
+    --endopts) shift; break;;
+    *) die "invalid option: $1";;
+  esac
+
+  shift
+done
+
+dir=${1:-"$PWD"}
+
+if ((confirm)); then
+  read -p "Flattening $dir, continue? [y/N] " reply >/dev/tty
+
+  if [[ ${reply,,} != y?(es) ]]; then
+    exit
+  fi
+fi
+
+# iterate over each top level dir
+for d in "$dir"/*/; do
+  # skip symlinks
+  [[ -L ${d%/} ]] && continue
+
+  # iterate over each file in the dir recursively, depth first
+  while IFS= read -rd '' f; do
+    bname=${f##*/}
+
+    # if it's a symlink, use readlink to get the target and create a new one
+    if [[ -L $f ]]; then
+      if [[ -e $f ]]; then
+        if ! link_target=$(readlink -e "$f"); then
+          die "error getting the target of symlink $f"
+        fi
+
+        if ! ln -s "$link_target" "$(new_filename "$dir/$bname")"; then
+          die "error creating new symlink to $link_target"
+        fi
+
+      # dangling link
+      else
+        printf 'symlink %s is dangling, removing' "$f" >&2
+      fi
+
+      if ! rm -f "$f"; then
+        die "error removing symlink $f"
+      fi
+
+    # if it's a dir, remove it (it should be empty)
+    elif [[ -d $f ]]; then
+      if ! rmdir "$f"; then
+        die "$f is not empty, cannot remove"
+      fi
+
+    # otherwise just move it to the parent
+    else
+      if ! mv "$f" "$(new_filename "$dir/$bname")"; then
+        die "error moving $f"
+      fi
+    fi
+  done < <(find "$d" -depth -print0)
+done

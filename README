@@ -10,7 +10,6 @@ fib:
 flatten:
   flattens a directory (recursively moves all files in sub-dirs to the current
   dir, and deletes the sub-dirs)
-  (work in progress)
 
 mycp:
   copies files. instead of erring or overwriting, appends numbers to dups
