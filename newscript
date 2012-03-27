@@ -140,6 +140,7 @@ for file; do
       file=$(noclobber "$file")
     else
       err "$file already exists"
+      toedit+=("$file")
       continue
     fi
   fi
