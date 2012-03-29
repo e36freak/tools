@@ -39,4 +39,4 @@ url_decode:
   uses libcurl to decode a given URL. must be compiled with -lcurl
 
 TODO:
-  extend mycp and flatten, and fix bugs
+  extend mycp, and fix bugs
