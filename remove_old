@@ -1,0 +1,215 @@
+#!/bin/bash
+
+# removes all but the latest N files
+
+shopt -s extglob
+# default variable values
+to_keep=10
+to_prompt=0
+verbose=0
+dotfiles=0
+user_max=0
+has_max=1
+max=1
+follow=0
+force=0
+confirm=1
+
+usage() {
+cat <<'EOF'
+remove_old [OPTION]... [DIR]...
+
+Removes all but the latest N files in DIR(s).
+If no DIR is supplied, use current working directory.
+If DIR is '-', read list of dirs from stdin, one per line.
+
+ Options:
+  -h, --help	     Display this prompt and exit.
+  -n, --num NUM      Keep NUM files. default is 10.
+  -r, --recurse      Remove files recursively.
+  -L, --follow       Follow symlinks when recursing. By default, remove_old
+                     will not follow them.
+  -m, --max NUM      Only recurse NUM levels (implies -r)
+  -f, --force        Force removal of files (rm -f)
+  -d, --dotfiles     Remove dotfiles as well.
+  -i, --interactive  Prompt before removal of every file.
+  -a, --no-confirm   Do not display a confirmation prompt before removing.
+                     By default, remove_old will prompt before each DIR.
+  -v, --verbose	     Display more info.
+
+Requires GNU find and sort.
+EOF
+}
+
+# usage: confirm PROMPT
+# yes/no prompt, returns according to the user's response
+confirm() {
+  local -l reply
+
+  read -p "$1 [y/N] " reply
+  [[ $reply = y?(es) ]]
+}
+
+# usage: get_files DIR [FIND_OPTIONS]
+# run the find command, using the arguments beyond "$1" as options to find
+# determines whether or not to follow symlinks based on -f, --follow
+get_files() {
+  if ((follow)); then
+    find -L "$@" -type f -printf '%T@ %p\0' | sort -znr
+  else
+    find "$@" -type f -printf '%T@ %p\0' | sort -znr
+  fi
+}
+
+# display error and exit with failure
+die() {
+  printf '%s\n' "$@"
+  exit 1
+} >&2
+
+# option string, for short options.
+# very much like getopts, any option followed by a ':' takes a required arg
+optstring=hn:rLm:fdiav
+
+# iterate over options, breaking -ab into -a -b and --foo=bar into --foo bar
+# also turns -- into --endopts to avoid issues with things like -o-, the '-'
+# should not be an end of options, but an invalid option
+unset options
+while (($#)); do
+  case $1 in
+    # if option is of type -ab
+    -[!-]?*)
+      # loop over each character starting with the second
+      for ((i=1; i<${#1}; i++)); do
+        c=${1:i:1}
+        
+        # add current char to options
+        options+=("-$c")
+
+        # if option takes a required argument, and it's not the last char
+        # make the rest of the string its argument
+        if [[ $optstring = *"$c:"* && ${1:i+1} ]]; then
+          options+=("${1:i+1}")
+          break
+        fi
+      done
+      ;;
+    # if option is of type --foo=bar, split on first '='
+    --?*=*) options+=("${1%%=*}" "${1#*=}");;
+    # add --endopts for --
+    --) options+=(--endopts);;
+    # otherwise, nothing special
+    *) options+=("$1");;
+  esac
+
+  shift
+done
+# set new positional parameters to altered options
+set -- "${options[@]}"
+unset options
+
+# parse options
+while [[ $1 = -?* ]]; do
+  case $1 in
+    -h|--help) usage; exit;;
+    -n|--num)
+      # make sure NUM is a valid int
+      [[ $2 && $2 != *[!0-9]* ]] || die "invalid number: $2"
+      to_keep=$2
+      shift
+      ;;
+    -r|--recurse)
+      if ((!user_max)); then
+        has_max=0
+      fi
+      ;;
+    -L|--follow) follow=1;;
+    -m|--max)
+      # make sure NUM is a valid int
+      [[ $2 && $2 != *[!0-9]* ]] || die "invalid number: $2"
+      user_max=1
+      has_max=1
+      max=$2
+      shift
+      ;;
+    -f|--force) force=1;;
+    -d|--dotfiles) dotfiles=1;;
+    -i|--interactive) to_prompt=1;;
+    -a|--no-confirm) confirm=0;;
+    -v|--verbose) verbose=1;;
+    --endopts) shift; break;;
+    *) die "invalid option: $1"
+  esac
+
+  shift
+done
+
+# populate array of dirs to use
+if (($#)); then
+  dirs=()
+  for dir; do
+    # if target is '-', read list from stdin
+    if [[ $dir = - ]]; then
+      while read -r line; do
+	dirs+=("$line")
+      done
+      
+      # make stdin the terminal again for rm prompting
+      exec </dev/tty
+
+    # if dir exists, add it to array
+    elif [[ -d $dir ]]; then
+      dirs+=("$dir")
+
+    # otherwise err
+    else
+      printf '%s does not exist or is not a directory, skipping\n' "$dir" >&2
+    fi
+  done
+
+# if no dirs specified, use '.'
+else
+  dirs=(.)
+fi
+
+# set rm command
+if ((to_prompt)); then
+  rm=(rm -i)
+else
+  rm=(rm)
+fi
+if ((force)); then
+  rm+=(-f)
+fi
+
+# set recursion, whether or not to ignore dotfiles/dirs
+findopts=()
+if ((has_max)); then
+  findopts+=(-maxdepth "$max")
+fi
+if ((!dotfiles)); then
+  findopts+=(\( -name '.*' ! -name '.' \) -prune -o)
+fi
+
+# loop over each dir provided, remove old files
+for dir in "${dirs[@]}"; do
+  if ((confirm)); then
+    confirm "Remove all files except the $to_keep latest from $dir?" ||
+      continue
+  fi
+  if ((verbose)); then
+    printf 'Processing dir: %s\n' "$dir"
+  fi
+  
+  i=0
+  while { read -rd ' ' t; IFS= read -rd '' f; } <&3; do
+    if ((++i > to_keep)); then
+      if ((verbose)); then
+        printf 'Removing file: "%s" with mtime: "%s"\n' \
+               "$f" "$(date -d "@${t%.*}" +'%F %H:%M:%S')"
+      fi
+
+      "${rm[@]}" "$f"
+    fi
+  done 3< <(get_files "$dir" "${findopts[@]}")
+done

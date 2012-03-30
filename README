@@ -26,6 +26,9 @@ options.bash:
   manual option parsing TEMPLATE for bash scripts, heavily commented with
   explanations
 
+remove_old:
+  removes all but the latest N files in DIR(s).
+
 seg:
   segfaults. for testing purposes.
 
