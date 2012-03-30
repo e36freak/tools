@@ -27,14 +27,15 @@ If DIR is '-', read list of dirs from stdin, one per line.
   -h, --help	     Display this prompt and exit.
   -n, --num NUM      Keep NUM files. default is 10.
   -r, --recurse      Remove files recursively.
-  -L, --follow       Follow symlinks when recursing. By default, remove_old
-                     will not follow them.
+  -L, --follow       Follow symlinks when recursing. By default, they will not
+                     be followed and instead will be ignored
   -m, --max NUM      Only recurse NUM levels (implies -r)
   -f, --force        Force removal of files (rm -f)
   -d, --dotfiles     Remove dotfiles as well.
   -i, --interactive  Prompt before removal of every file.
   -a, --no-confirm   Do not display a confirmation prompt before removing.
-                     By default, remove_old will prompt before each DIR.
+                     By default, a prompt is printed before processing each
+                     DIR
   -v, --verbose	     Display more info.
 
 Requires GNU find and sort.
