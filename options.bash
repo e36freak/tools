@@ -13,7 +13,8 @@
 optstring=h
 
 # iterate over options, breaking -ab into -a -b and --foo=bar into --foo bar
-# also turns -- into --endopts to avoid issues with things like wget -O-
+# also turns -- into --endopts to avoid issues with things like '-o-', the '-'
+# should not indicate the end of options, but be an invalid option
 unset options
 while (($#)); do
   case $1 in
