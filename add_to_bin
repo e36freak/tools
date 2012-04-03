@@ -1,0 +1,135 @@
+#!/bin/bash
+
+shopt -s extglob nullglob
+force=0
+verbose=0
+
+# err and exit
+die() {
+  printf '%s\n' "$@"
+  exit 1
+} >&2
+
+usage() {
+cat <<'EOF'
+add_to_bin [DIR]
+
+Compiles all of the *.c files, and creates hard links to all of the scripts, in
+the current dir into DIR (~/bin by default)
+
+ Options:
+  -h, --help      Display this help and exit
+  -f, --force     Overwrite existing files
+  -v, --verbose   Output more
+EOF
+}
+
+# iterate over options, break -ab into -a -b and --foo=bar into --foo bar
+unset options
+while (($#)); do
+  case $1 in
+    -[!-]?*)
+      for ((i=1; i<${#1}; i++)); do
+        options+=("-${1:i:1}")
+      done
+      ;;
+    --?*=*) options+=("${1%%=*}" "${1#*=}");;
+    --) options+=(--endopts);;
+    *) options+=("$1");;
+  esac
+
+  shift
+done
+set -- "${options[@]}"
+unset options
+
+# actually parse the options and do stuff
+while [[ $1 = -?* ]]; do
+  case $1 in
+    -h|--help) usage; exit 0;;
+    -f|--force) force=1;;
+    -v|--verbose) verbose=1;;
+    --endopts) shift; break;;
+    *) die "invalid option: $1";;
+  esac
+
+  shift
+done
+
+# set target dir
+target=${1:-$HOME/bin}
+
+# make sure target dir exists, create it if it doesn't
+if ! mkdir -p "$target"; then
+  die "error creating $target"
+fi
+
+if ! [[ -r $target && -w $target && -x $target ]]; then
+  die "permissions issue, $target is missing +r, +w, or +x"
+fi
+
+# loop over each file in the current dir, except for this one
+for f in !(add_to_bin); do
+  # if it's a C program...
+  if [[ $f = *.c ]]; then
+    out=$target/${f%.c}
+    if ((verbose)); then
+      printf 'compiling %s, output file %s\n' "$f" "$out"
+    fi
+
+    # if the output file exists, rm if force is set or err and skip
+    if [[ -e $out ]]; then
+      if ((force)); then
+        rm -f "$out"
+      else
+        printf '%s exists, skipping compiling %s\n' "$out" "$f" >&2
+        continue
+      fi
+    fi
+
+    case $f in
+      # if it's a url_* tool, compile with -lcurl
+      url_*)
+        if ! gcc -Wall -o "$out" -lcurl "$f"; then
+          die "error compiling $f"
+        fi
+        ;;
+
+      # fib.c must be compiled with -lgmp
+      fib.c)
+        if ! gcc -Wall -o "$out" -lgmp "$f"; then
+          die "error compiling $f"
+        fi
+        ;;
+
+      # otherwise, just compile normally
+      *)
+        if ! gcc -Wall -o "$out" "$f"; then
+          die "error compiling $f"
+        fi
+        ;;
+    esac
+  
+  # otherwise, if it's executable, create a hard link in target
+  elif [[ -x $f ]]; then
+    if ((verbose)); then
+      printf 'creating hard link to %s\n' "$f"
+    fi
+
+    # if the output file exists, rm if force is set or err and skip
+    if [[ -e $target/$f ]]; then
+      if ((force)); then
+        rm -f "$target/$f"
+      else
+        printf '%s exists, skipping creating a hard link to %s\n' \
+               "$target/$f" "$f" >&2
+        continue
+      fi
+    fi
+
+    # create hard link
+    ln -t "$target" "$f"
+  fi
+  # files that aren't *.c, nor executable, are README or a template/lib
+  # they get ignored
+done

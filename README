@@ -1,3 +1,7 @@
+add_to_bin:
+  compiles all of the *.c files, and creates hard links to all of the scripts,
+  in the current dir into DIR (~/bin by default)
+
 args:
   prints command line arguments given in a very readable format
 
@@ -5,7 +9,7 @@ fah-stats:
   parses the FAH log and gives useful information
 
 fib:
-  prints the Nth number of the fibonacci sequence
+  prints the Nth number of the fibonacci sequence. must be compiled with -lgmp
 
 flatten:
   flattens a directory (recursively moves all files in sub-dirs to the current
