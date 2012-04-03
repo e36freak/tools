@@ -7,6 +7,8 @@ cron=0
 fullshebang=0
 lang=bash
 edit=0
+user_editor=0
+editor=
 toedit=()
 
 # add a PATH assignment and export to the script, based on the curent PATH
@@ -64,9 +66,11 @@ err() {
   printf '%s\n' "$@"
 } >&2
 
-# open VISUAL, EDITOR, or "vi", in that order
+# open editor (if user supplied), VISUAL, EDITOR, or "vi", in that order
 editor() {
-  if [[ $VISUAL ]]; then
+  if ((user_editor)); then
+    $editor "$@"
+  elif [[ $VISUAL ]]; then
     $VISUAL "$@"
   else
     ${EDITOR:-vi} "$@"
@@ -105,6 +109,9 @@ newscript [OPTIONS] NAME [...]
   -n, --no-clobber        prepends a number to the end of each existing NAME
                           instead of erring
   -e, --edit              open created files in a text editor
+  -p, --editor PROG       use PROG instead of the default editor. by default,
+                          VISUAL, EDITOR, or vi will be used, in that order.
+                          implies -e (--edit)
 
  Available languages for LANG are:
   bash, sh, awk, sed, perl, python
@@ -113,7 +120,7 @@ EOF
 
 # iterate over options breaking -ab into -a -b when needed and
 # --foo=bar into --foo bar
-optstring=hl:s:cne
+optstring=hl:s:cnep:
 while (($#)); do
   case $1 in
     # if option is of type -ab
@@ -159,6 +166,12 @@ while [[ $1 = -?* ]]; do
       shift
       ;;
     -e|--edit) edit=1;;
+    -p|--editor)
+      [[ $2 ]] || die "argument required for $1"
+      user_editor=1
+      edit=1
+      editor=$2
+      ;;
     --endopts) shift; break;;
     -h|--help) usage; exit 0;;
     *) die "invalid option: $1";;
