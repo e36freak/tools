@@ -149,10 +149,7 @@ while [[ $1 = -?* ]]; do
     -n|--no-clobber) nc=1;;
     -l|--language)
       [[ $2 ]] || die "argument required for $1"
-      case $2 in
-        bash|awk|sed|perl|python) lang=$2;;
-        *) die "$2 is not an available preset language";;
-      esac
+      lang=$2
       shift
       ;;
     -s|--shebang)
@@ -170,19 +167,20 @@ while [[ $1 = -?* ]]; do
   shift
 done
 
-(($#)) || die "no targets specified"
-
-if ((cron)) && {
-    { ((fullshebang)) && [[ $shebang != */bash!(/) ]]; } || 
-    [[ $lang != bash ]]; }; then
-  die "cron option is only available for bash"
+# check for targets
+if ((! $#)); then
+  die "no targets specified"
 fi
 
+# if -s is used, check if the language is bash, sh, or perl, and set lang
 if ((fullshebang)); then
   case $shebang in
-    */bash!(/)) lang=bash;;
-    */perl!(/)) lang=perl;;
+    */bash*([!/]) ) lang=bash;;
+    */sh*([!/]) )   lang=sh;;
+    */perl*([!/]) ) lang=perl;;
   esac
+
+# otherwise, validate lang and set the correct shebang
 else
   case $lang in
     bash)   shebang='#!/bin/bash';;
@@ -191,13 +189,24 @@ else
     sed)    shebang='#!/bin/sed -f';;
     perl)   shebang='#!/usr/bin/perl';;
     python) shebang='#!/usr/bin/python';;
+    *) die "$lang is not an available preset language"
   esac
 fi
 
+# make sure if cron is provided, language is bash or sh
+if ((cron)) && [[ $lang != ?(ba)sh ]]; then
+  die "cron option is only available for bash or sh"
+fi
+
+# iterate over each target file
 for file; do
+  # if target exists
   if [[ -e $file ]]; then
+    # if noclobber is on, set file to the new filename (with .N)
     if ((nc)); then
       file=$(noclobber "$file")
+
+    # otherwise, don't create the file, but add it to be edited for -e
     else
       err "$file already exists"
       toedit+=("$file")
@@ -205,8 +214,10 @@ for file; do
     fi
   fi
 
+  # write the shebang, and possibly other stuff, to the new file
   {
     printf '%s\n\n' "$shebang"
+
     case $lang in
       bash)
         printf '%s\n\n' 'shopt -s extglob nullglob'
@@ -221,8 +232,11 @@ for file; do
     esac
   } > "$file"
 
+  # make file executable
   chmod +x -- "$file" || err "error making $file executable"
+  # add file to list of files to edit
   toedit+=("$file")
 done
 
+# if -e is used, open the file(s) in the preferred editor
 ((edit)) && editor "${toedit[@]}"
