@@ -26,7 +26,7 @@ add_path() {
   done
   ((i--))
 
-  # if one element is too long, use it anyway
+  # if a single element is too long, use it anyway
   if ((cur < elements && cur == i)); then
     ((i++))
   fi
