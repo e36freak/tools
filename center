@@ -1,0 +1,30 @@
+#!/bin/awk -f
+
+# usage: trim(STRING)
+# returns STRING with leading and trailing whitespace removed
+function trim(str) {
+  gsub(/^[[:space:]]*|[[:space:]]*$/, "", str);
+
+  return str;
+}
+
+# get the value for 'cols', terminal width if stdout is a tty or 80 if not
+BEGIN {
+  if (system("test -t 1")) {
+    cols = 80;
+  } else {
+    cmd = "tput cols";
+    cmd | getline cols;
+    close(cmd);
+  }
+}
+
+{
+  # trim leading/trailing whitespace
+  str = trim($0);
+  # determine offset
+  off = cols / 2 + length(str) / 2;
+
+  # print the line
+  printf("%*s\n", off, str);
+}
