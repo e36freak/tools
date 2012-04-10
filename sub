@@ -133,7 +133,7 @@ while [[ $1 = -?* ]]; do
     -g|--global) global=1;;
     -i|--in-place) in_place=1;;
     --endopts) shift; break;;
-    *) die "invalid option: $1";;
+    *) die "invalid option: \`$1'";;
   esac
 
   shift
@@ -157,14 +157,17 @@ for file; do
 
   if ((in_place)); then
     if ! [[ -f $file && -r $file && -w $file ]]; then
-      printf "%s does not exist or is not readable or writable" "$file" >&2
+      printf "\`%s' does not exist or is not readable or writable" "$file" >&2
       continue
     fi
 
-    tmp=$(mktemp) && cp "$file" "$tmp" || die "could not create temp file"
+    tmp=$(mktemp) || die "could not create temp file"
     temps+=("$tmp")
 
-    do_sub < "$tmp" > "$file"
+    perms=$(stat -c '%a' "$file") || die "could not stat \`$file'"
+    do_sub < "$file" > "$tmp" || die "error performing substitutions on \`$file'"
+    mv "$tmp" "$file" || die "error overwriting \`$file'"
+    chmod "$perms" "$file" || die "error fixing permissions for \`$file'"
   else
     do_sub < "$file"
   fi
