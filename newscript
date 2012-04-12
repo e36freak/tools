@@ -57,14 +57,14 @@ add_path() {
 
 # print error and exit
 die() {
-  printf '%s\n' "$@"
+  printf '%s\n' "$@" >&2
   exit 1
-} >&2
+}
 
 # print error, do not exit
 err() {
-  printf '%s\n' "$@"
-} >&2
+  printf '%s\n' "$@" >&2
+}
 
 # open editor (if user supplied), VISUAL, EDITOR, or "vi", in that order
 editor() {
@@ -152,6 +152,7 @@ unset options
 
 while [[ $1 = -?* ]]; do
   case $1 in
+    -h|--help) usage >&2; exit 0;;
     -c|--cron) cron=1;;
     -n|--no-clobber) nc=1;;
     -l|--language)
@@ -173,7 +174,6 @@ while [[ $1 = -?* ]]; do
       editor=$2
       ;;
     --endopts) shift; break;;
-    -h|--help) usage; exit 0;;
     *) die "invalid option: $1";;
   esac
 

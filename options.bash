@@ -14,7 +14,8 @@ optstring=h
 
 # iterate over options, breaking -ab into -a -b and --foo=bar into --foo bar
 # also turns -- into --endopts to avoid issues with things like '-o-', the '-'
-# should not indicate the end of options, but be an invalid option
+# should not indicate the end of options, but be an invalid option (or the
+# argument to the option, such as wget -qO-)
 unset options
 while (($#)); do
   case $1 in
@@ -52,7 +53,7 @@ unset options
 # actually parse the options and do stuff
 while [[ $1 = -?* ]]; do
   case $1 in
-    -h|--help) usage; exit 0;;
+    -h|--help) usage >&2; exit 0;;
     --endopts) shift; break;;
     *) die "invalid option: $1";;
   esac

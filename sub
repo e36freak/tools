@@ -69,6 +69,7 @@ do_sub() {
   fi
 }
 
+# print usage
 usage() {
 cat <<'EOF'
 sub [OPTION] STR REP [FILE(s)]
@@ -129,7 +130,7 @@ unset options
 # actually parse the options and do stuff
 while [[ $1 = -?* ]]; do
   case $1 in
-    -h|--help) usage; exit 0;;
+    -h|--help) usage >&2; exit 0;;
     -g|--global) global=1;;
     -i|--in-place) in_place=1;;
     --endopts) shift; break;;

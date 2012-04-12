@@ -46,7 +46,7 @@ unset options
 # actually parse the options and do stuff
 while [[ $1 = -?* ]]; do
   case $1 in
-    -h|--help) usage; exit 0;;
+    -h|--help) usage >&2; exit 0;;
     -f|--force) force=1;;
     -v|--verbose) verbose=1;;
     --endopts) shift; break;;

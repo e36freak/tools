@@ -64,9 +64,9 @@ get_files() {
 
 # display error and exit with failure
 die() {
-  printf '%s\n' "$@"
+  printf '%s\n' "$@" >&2
   exit 1
-} >&2
+}
 
 # option string, for short options.
 # very much like getopts, any option followed by a ':' takes a required arg
@@ -112,7 +112,7 @@ unset options
 # parse options
 while [[ $1 = -?* ]]; do
   case $1 in
-    -h|--help) usage; exit;;
+    -h|--help) usage >&2; exit 0;;
     -n|--num)
       # make sure NUM is a valid int
       [[ $2 && $2 != *[!0-9]* ]] || die "invalid number: $2"

@@ -71,7 +71,7 @@ unset options
 # actually parse the options and do stuff
 while [[ $1 = -?* ]]; do
   case $1 in
-    -h|--help) usage; exit 0;;
+    -h|--help) usage >&2; exit 0;;
     -n|--no-confirm) confirm=0;;
     --endopts) shift; break;;
     *) die "invalid option: $1";;
