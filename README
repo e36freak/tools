@@ -5,9 +5,10 @@ add_to_bin:
 args:
   prints command line arguments given in a very readable format
 
-center:
-  prints the contents of a file, or stdin, centered on the terminal (assumes
-  width is 80 if stdout is not a terminal)
+cfold:
+  Wraps input lines in each FILE (standard input if not provided), writing to
+  standard output. Also included (although slightly different) in awk-libs as
+  an example
 
 fah-stats:
   parses the FAH log and gives useful information
