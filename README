@@ -1,3 +1,5 @@
+These tools are written in C, bash 4, and POSIX awk.
+
 add_to_bin:
   compiles all of the *.c files, and creates hard links to all of the scripts,
   in the current dir into DIR (~/bin by default)
@@ -8,7 +10,8 @@ args:
 cfold:
   Wraps input lines in each FILE (standard input if not provided), writing to
   standard output. Also included (although slightly different) in awk-libs as
-  an example
+  an example. must be called with cfold -- [OPTIONS] [FILE...] (the -- as the
+  first arg is required)
 
 fah-stats:
   parses the FAH log and gives useful information
@@ -42,7 +45,8 @@ seg:
   segfaults. for testing purposes.
 
 sub:
-  substitutes STR for REP, treating them as literal strings
+  substitutes STR for REP, treating them as literal strings. must be called
+  with sub -- [OPTIONS] [FILE...] (the '--' as the first argument is required)
 
 url_encode:
   uses libcurl to escape a given URL. must be compiled with -lcurl
