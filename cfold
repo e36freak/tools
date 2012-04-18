@@ -1,0 +1,351 @@
+#!/bin/awk -f
+
+## usage: center(string[, width])
+## returns "string" centered based on "width". if "width" is not provided (or 
+## is 0), uses the width of the terminal, or 80 if standard output is not open
+## on a terminal.
+## note: does not check the length of the string. if it's wider than the
+## terminal, it will not center lines other than the first. for best results,
+## combine with fold() (see the cfold script in the examples directory for a
+## script that does exactly this)
+function center(str, cols,    off, cmd) {
+  if (!cols) {
+    # checks if stdout is a tty
+    if (system("test -t 1")) {
+      cols = 80;
+    } else {
+      cmd = "tput cols";
+      cmd | getline cols;
+      close(cmd);
+    }
+  }
+
+  off = int((cols/2) + (length(str)/2));
+
+  return sprintf("%*s", off, str);
+}
+
+## usage: fold(string, sep[, width])
+## returns "string", wrapped, with lines broken on "sep" to "width" columns.
+## "sep" is a list of characters to break at, similar to IFS in a POSIX shell.
+## if "sep" is empty, wraps at exactly "width" characters. if "width" is not
+## provided (or is 0), uses the width of the terminal, or 80 if standard output
+## is not open on a terminal.
+## note: currently, tabs are squeezed to a single space. this will be fixed
+function fold(str, sep, cols,    out, cmd, i, len, chars, c, last, f, first) {
+  if (!cols) {
+    # checks if stdout is a tty
+    if (system("test -t 1")) {
+      cols = 80;
+    } else {
+      cmd = "tput cols";
+      cmd | getline cols;
+      close(cmd);
+    }
+  }
+
+  # squeeze tabs and newlines to spaces
+  gsub(/[\t\n]/, " ", str);
+
+  # if "sep" is empty, just fold on cols with substr
+  if (!length(sep)) {
+    len = length(str);
+
+    out = substr(str, 1, cols);
+    for (i=cols+1; i<=len; i+=cols) {
+      out = out "\n" substr(str, i, cols);
+    }
+
+    return out;
+
+  # otherwise, we have to loop over every character (can't split() on sep, it
+  # would destroy the existing separators)
+  } else {
+    # split string into char array
+    len = split(str, chars, //);
+    # set boolean, used to assign the first line differently
+    first = 1;
+
+    for (i=1; i<=len; i+=last) {
+      f = 0;
+      for (c=i+cols-1; c>=i; c--) {
+        if (index(sep, chars[c])) {
+          last = c - i + 1;
+          f = 1;
+          break;
+        }
+      }
+
+      if (!f) {
+        last = cols;
+      }
+
+      if (first) {
+        out = substr(str, i, last);
+        first = 0;
+      } else {
+        out = out "\n" substr(str, i, last);
+      }
+    }
+  }
+
+  # return the output
+  return out;
+}
+
+## usage: getopts(optstring [, longopt_array ])
+## parses options, and deletes them from ARGV. "optstring" is of the form
+## "ab:c". each letter is a possible option. if the letter is followed by a
+## colon (:), then the option requires an argument. if an argument is not
+## provided, or an invalid option is given, getopts will print the appropriate
+## error message and return "?". returns each option as it's read, and -1 when
+## no options are left. "optind" will be set to the index of the next
+## non-option argument when finished.  "optarg" will be set to the option's
+## argument, when provided. if not provided, "optarg" will be empty. "optname"
+## will be set to the current option, as provided. getopts will delete each
+## option and argument that it successfully reads, so awk will be able to treat
+## whatever's left as filenames/assignments, as usual. if provided,
+## "longopt_array" is the name of an associative array that maps long options to
+## the appropriate short option. (do not include the hyphens on either).
+## sample usage can be found in the examples dir, with gawk extensions, or in
+## the ogrep script for a POSIX example: https://github.com/e36freak/ogrep
+function getopts(optstring, longarr,    opt, trimmed, hasarg, repeat) {
+  hasarg = repeat = 0;
+  # increment optind
+  optind++;
+
+  # return -1 if the current arg is not an option or there are no args left
+  if (ARGV[optind] !~ /^-/ || optind >= ARGC) {
+    return -1;
+  }
+
+  # if option is "--" (end of options), delete arg and return -1
+  if (ARGV[optind] == "--") {
+    for (i=1; i<=optind; i++) {
+      delete ARGV[i];
+    }
+    return -1;
+  }
+
+  # if the option is a long argument...
+  if (ARGV[optind] ~ /^--/) {
+    # trim hyphens
+    trimmed = substr(ARGV[optind], 3);
+    # if of the format --foo=bar, split the two. assign "bar" to optarg and
+    # set hasarg to 1
+    if (trimmed ~ /.*=.*/) {
+      optarg = trimmed;
+      sub(/=.*/, "", trimmed); sub(/^[^=]*=/, "", optarg);
+      hasarg = 1;
+    }
+    
+    # invalid long opt
+    if (!(trimmed in longarr)) {
+      printf("unrecognized option -- '%s'\n", ARGV[optind]) > "/dev/stderr";
+      return "?";
+    }
+
+    opt = longarr[trimmed];
+    # set optname by prepending dashes to the trimmed argument
+    optname = "--" trimmed;
+
+  # otherwise, it is a short option
+  } else {
+    # remove the hyphen, and get just the option letter
+    opt = substr(ARGV[optind], 2, 1);
+    # set trimmed to whatevers left
+    trimmed = substr(ARGV[optind], 3);
+
+    # invalid option
+    if (!index(optstring, opt)) {
+      printf("invalid option -- '%s'\n", opt) > "/dev/stderr";
+      return "?";
+    }
+
+    # if there is more to the argument than just -o
+    if (length(trimmed)) {
+      # if option requires an argument, set the rest to optarg and hasarg to 1
+      if (index(optstring, opt ":")) {
+        optarg = trimmed;
+        hasarg = 1;
+
+      # otherwise, prepend a hyphen to the rest and set repeat to 1, so the
+      # same arg is processed again without the first option
+      } else {
+        ARGV[optind] = "-" trimmed;
+        repeat = 1;
+      }
+    }
+
+    # set optname by prepending a hypen to opt
+    optname = "-" opt;
+  }
+
+  # if the option requires an arg and hasarg is 0
+  if (index(optstring, opt ":") && !hasarg) {
+    # increment optind, check if no arguments are left
+    if (++optind >= ARGC) {
+      printf("option requires an argument -- '%s'\n", optname) > "/dev/stderr";
+      return "?";
+    }
+
+    # set optarg
+    optarg = ARGV[optind];
+
+  # if repeat is set, decrement optind so we process the same arg again
+  # mutually exclusive to needing an argument, otherwise hasarg would be set
+  } else if (repeat) {
+    optind--;
+  }
+
+  # delete all arguments up to this point, just to make sure
+  for (i=1; i<=optind; i++) {
+    delete ARGV[i];
+  }
+
+  # return the option letter
+  return opt;
+}
+
+## usage: trim(string)
+## returns "string" with leading and trailing whitespace trimmed
+function trim(str) {
+  gsub(/^[[:blank:]]+|[[:blank:]]+$/, "", str);
+
+  return str;
+}
+
+# prints usage
+function usage() {
+  printf("%s\n\n%s\n\n%s\n%s\n%s\n%s\n\n",
+"cfold -- [OPTIONS] [FILE...]",
+"the '--' is required, so AWK it self doesn't read the options",
+"Wraps input lines in each FILE (standard input if not provided), writing to",
+"standard output. The default width is that of the terminal, or 80 columns if",
+"standard output is not a terminal. If FILE is '-', also reads the standard",
+"input") > "/dev/stderr";
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+" Options:",
+"  -c, --center         center each line on the terminal. assumes a width of 80",
+"                       columns if standard output is not a terminal",
+"  -b, --break[=LIST]   break lines at spaces. LIST, if provided, is a list of",
+"                       characters to break lines at instead of spaces. For",
+"                       example, --break=abc will break lines on \"a\" or \"b\"",
+"                       Note: an empty string for LIST will revert to the",
+"                       default behavior, it is not the same as omitting -b",
+"  -i, --ignore-breaks  convert existing single line breaks to spaces. multiple",
+"                       line breaks like those at the end of paragraphs will be",
+"                       truncated to a single empty line",
+"  -w, --width WIDTH    use WIDTH columns instead of the terminal's width",
+"  -t, --trim           trim leading and trailing whitespace from each line",
+"                       prior to folding",
+"  -h, --help           display this help and exit") > "/dev/stderr";
+}
+
+BEGIN {
+  # initialize variables to defaults
+  toexit = err = 0;
+  tocenter = toignore = totrim = 0;
+  break_chars = "";
+
+  # get default width
+  if (system("test -t 1")) {
+    # stdout is not open on a tty
+    width = 80
+  } else {
+    cmd = "tput cols";
+    cmd | getline width;
+    close(cmd);
+  }
+
+  # map long options to short options
+  longopts["center"]        = "c";
+  longopts["break"]         = "b";
+  longopts["ignore-breaks"] = "i";
+  longopts["width"]         = "w";
+  longopts["trim"]          = "t";
+  longopts["help"]          = "h";
+
+  # parse the options
+  while ((opt = getopts("cbiw:th", longopts)) != -1) {
+    switch(opt) {
+      # -c, --center
+      case "c":
+        tocenter = 1; break;
+
+      # -b, --break
+      case "b":
+        if (length(optarg)) {
+          break_chars = optarg;
+        } else {
+          break_chars = " \t\n";
+        }
+        break;
+
+      # -i, --ignore-breaks
+      case "i":
+        toignore = 1; break;
+
+      # w, --width
+      case "w":
+        # make sure optarg is an integer
+        if (optarg !~ /^[0-9]+$/) {
+          printf("'%s' is not a valid argument for '%s', must be a number",
+                 optarg, optname) > "/dev/stderr";
+          err = toexit = 1;
+          exit;
+        }
+        width = optarg;
+        break;
+
+      # -t, --trim
+      case "t":
+        totrim = 1; break;
+
+      # -h, --help
+      case "h":
+        usage(); toexit = 1; exit;
+
+      # error
+      case "?":
+      default:
+        err = toexit = 1;
+        exit;
+    }
+  }
+
+  # if --ignore-breaks was used, set RS to null so that paragraphs are
+  # treated as one line
+  if (toignore) {
+    RS = "";
+  }
+}
+
+########
+
+# if --ignore-breaks was used, print extra newline between records
+toignore && NR > 1 {
+  print "";
+}
+
+# fold each record (line, or paragraph)
+{
+
+  # if --trim was used, reassign $0 with leading/trailing whitespace removed
+  if (totrim) {
+    $0 = trim($0);
+  }
+
+  out = fold($0, break_chars, width);
+
+  # if text is to be centered, split out into an array of lines and center each
+  if (tocenter) {
+    len = split(out, lines, /\n/);
+
+    for (i=1; i<=len; i++) {
+      print center(lines[i]);
+    }
+  } else {
+    print out;
+  }
+}
