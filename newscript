@@ -100,6 +100,8 @@ usage() {
 cat <<'EOF'
 newscript [OPTIONS] NAME [...]
 
+Creates a new script for each NAME, in the current working directory
+
  Options:
   -h, --help              display this help and exit
   -l, --language LANG     specify the language LANG, default is bash
