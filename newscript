@@ -234,7 +234,7 @@ names+=("$@")
 
 # if no names have been passed, either from the command line or if the 
 # --files-from file was empty, die
-if ((!${#names[@]}))
+if ((!${#names[@]})); then
   die "no targets specified"
 fi
 
