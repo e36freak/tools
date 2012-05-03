@@ -4,13 +4,16 @@ shopt -s extglob nullglob
 
 nc=0
 cron=0
+edit=0
 fullshebang=0
 lang=bash
-edit=0
 user_editor=0
 editor=
 toedit=()
+names=()
+f=
 
+# TODO: rewrite this function better
 # add a PATH assignment and export to the script, based on the curent PATH
 # splits on colons so that the lines are truncated to 80 chars
 add_path() {
@@ -55,17 +58,20 @@ add_path() {
   printf "%s\n\n" 'export PATH'
 }
 
+# usage: die MESSAGE
 # print error and exit
 die() {
   printf '%s\n' "$@" >&2
   exit 1
 }
 
+# usage: err MESSAGE
 # print error, do not exit
 err() {
   printf '%s\n' "$@" >&2
 }
 
+# usage: editor FILE ...
 # open editor (if user supplied), VISUAL, EDITOR, or "vi", in that order
 editor() {
   if ((user_editor)); then
@@ -77,6 +83,22 @@ editor() {
   fi
 }
 
+# usage: get_names IS_NUL
+# reads stdin, appending each name within to the targets array. if IS_NUL is
+# unset or empty, reads one name per line. otherwise, reads NUL-delimited names
+get_names() {
+  local cmd=(read -r) name
+
+  if [[ $1 ]]; then
+    cmd+=(-d '')
+  fi
+
+  while IFS= "${cmd[@]}" name; do
+    names+=("$name")
+  done
+}
+
+# usage: noclobber FILE
 # adds '.N' to a filename, sans extension, until it doesn't exist
 noclobber() {
   local out=$1 i=0
@@ -96,6 +118,8 @@ noclobber() {
   printf '%s\n' "$out"
 }
 
+# usage: usage
+# ...heh
 usage() {
 cat <<'EOF'
 newscript [OPTIONS] NAME [...]
@@ -114,6 +138,9 @@ Creates a new script for each NAME, in the current working directory
   -p, --editor PROG       use PROG instead of the default editor. by default,
                           VISUAL, EDITOR, or vi will be used, in that order.
                           implies -e (--edit)
+  -t, --files-from FILE   get a list of NAMEs from FILE, one per line (if NAMEs
+                          are also provided, both will be used)
+  -T, --files-from0 FILE  same as --files-from, but uses NUL-delimited NAMEs
 
  Available languages for LANG are:
   bash, sh, awk, sed, perl, python
@@ -122,7 +149,7 @@ EOF
 
 # iterate over options breaking -ab into -a -b when needed and
 # --foo=bar into --foo bar
-optstring=hl:s:cnep:
+optstring=hl:s:cnep:t:T:
 while (($#)); do
   case $1 in
     # if option is of type -ab
@@ -158,22 +185,44 @@ while [[ $1 = -?* ]]; do
     -c|--cron) cron=1;;
     -n|--no-clobber) nc=1;;
     -l|--language)
-      [[ $2 ]] || die "argument required for $1"
+      [[ $2 ]] || die "LANG required for $1"
       lang=$2
       shift
       ;;
     -s|--shebang)
-      [[ $2 ]] || die "argument required for $1"
+      [[ $2 ]] || die "SHEBANG required for $1"
       fullshebang=1
       shebang=$2
       shift
       ;;
     -e|--edit) edit=1;;
     -p|--editor)
-      [[ $2 ]] || die "argument required for $1"
+      [[ $2 ]] || die "PROG required for $1"
       user_editor=1
       edit=1
       editor=$2
+      ;;
+    -t|--files-from)
+      [[ $2 ]] || die "FILE required for $1"
+      if [[ $2 = - ]]; then
+        get_names
+      elif [[ ! -f $2 || ! -r $2 ]]; then
+        die "$2 does not exist or is not readable"
+      else
+        get_names <"$2"
+      fi
+      shift
+      ;;
+    -T|--files-from0)
+      [[ $2 ]] || die "FILE required for $1"
+      if [[ $2 = - ]]; then
+        get_names nul
+      elif [[ ! -f $2 || ! -r $2 ]]; then
+        die "$2 does not exist or is not readable"
+      else
+        get_names nul <"$2"
+      fi
+      shift
       ;;
     --endopts) shift; break;;
     *) die "invalid option: $1";;
@@ -182,8 +231,12 @@ while [[ $1 = -?* ]]; do
   shift
 done
 
-# check for targets
-if ((! $#)); then
+# append remaining positional parameters to the names array
+names+=("$@")
+
+# if no names have been passed, either from the command line or if the 
+# --files-from file was empty, die
+if ((!${#names[@]}))
   die "no targets specified"
 fi
 
@@ -214,7 +267,7 @@ if ((cron)) && [[ $lang != ?(ba)sh ]]; then
 fi
 
 # iterate over each target file
-for file; do
+for file in "${names[@]}"; do
   # if target exists
   if [[ -e $file ]]; then
     # if noclobber is on, set file to the new filename (with .N)
