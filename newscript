@@ -11,9 +11,7 @@ user_editor=0
 editor=
 toedit=()
 names=()
-f=
 
-# TODO: rewrite this function better
 # add a PATH assignment and export to the script, based on the curent PATH
 # splits on colons so that the lines are truncated to 80 chars
 add_path() {
@@ -274,10 +272,14 @@ for file in "${names[@]}"; do
     if ((nc)); then
       file=$(noclobber "$file")
 
-    # otherwise, don't create the file, but add it to be edited for -e
+    # otherwise, don't create the file, but try to add it to be edited for -e
     else
       err "$file already exists"
-      toedit+=("$file")
+
+      if [[ -f $file && -r $file ]]; then
+        toedit+=("$file")
+      fi
+
       continue
     fi
   fi
