@@ -148,35 +148,41 @@ EOF
 # iterate over options breaking -ab into -a -b when needed and
 # --foo=bar into --foo bar
 optstring=hl:s:cnep:t:T:
+unset options
 while (($#)); do
   case $1 in
     # if option is of type -ab
     -[!-]?*)
+      # loop over each character starting with the second
       for ((i=1; i<${#1}; i++)); do
         c=${1:i:1}
+        
+        # add current char to options
+        options+=("-$c")
 
-        if [[ $optstring = *"$c":* ]]; then
-          options+=(-"$c" "${1:2}")
+        # if option takes a required argument, and it's not the last char
+        # make the rest of the string its argument
+        if [[ $optstring = *"$c:"* && ${1:i+1} ]]; then
+          options+=("${1:i+1}")
           break
-        else
-          options+=(-"$c")
         fi
       done
       ;;
-
     # if option is of type --foo=bar, split on first '='
     --?*=*) options+=("${1%%=*}" "${1#*=}");;
-
+    # add --endopts for --
+    --) options+=(--endopts);;
     # otherwise, nothing special
     *) options+=("$1");;
   esac
 
   shift
 done
-# reset "$@" to "${options[@]}"
+# set new positional parameters to altered options
 set -- "${options[@]}"
 unset options
 
+# actually read the options and set stuff
 while [[ $1 = -?* ]]; do
   case $1 in
     -h|--help) usage >&2; exit 0;;
