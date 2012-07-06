@@ -1,5 +1,31 @@
 #!/bin/awk -f
 
+# cfold -- [OPTIONS] [FILE...]
+# 
+# the '--' is required, so AWK it self doesn't read the options
+# 
+# Wraps input lines in each FILE (standard input if not provided), writing to
+# standard output. The default width is that of the terminal, or 80 columns if
+# standard output is not a terminal. If FILE is '-', also reads the standard
+# input
+# 
+#  Options:
+#   -c, --center         center each line on the terminal. assumes a width of 80
+#                        columns if standard output is not a terminal
+#   -b, --break[=LIST]   break lines at spaces. LIST, if provided, is a list of
+#                        characters to break lines at instead of spaces. For
+#                        example, --break=abc will break lines on "a" or "b"
+#                        Note: an empty string for LIST will revert to the
+#                        default behavior, it is not the same as omitting -b
+#   -i, --ignore-breaks  convert existing single line breaks to spaces. multiple
+#                        line breaks like those at the end of paragraphs will be
+#                        truncated to a single empty line
+#   -w, --width WIDTH    use WIDTH columns instead of the terminal's width
+#   -t, --trim           trim leading and trailing whitespace from each line
+#                        prior to folding
+#   -h, --help           display this help and exit
+
+
 ## usage: center(string[, width])
 ## returns "string" centered based on "width". if "width" is not provided (or 
 ## is 0), uses the width of the terminal, or 80 if standard output is not open
