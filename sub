@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# sub [OPTION] STR REP [FILE(s)]
+# sub [OPTIONS] STR REP [FILE(s)]
 # 
 # Replaces STR with REP in FILE(s), or stdin if no files are provided or a
 # target filename is '-'.
@@ -87,7 +87,7 @@ do_sub() {
 # print usage
 usage() {
 cat <<'EOF'
-sub [OPTION] STR REP [FILE(s)]
+sub [OPTIONS] STR REP [FILE(s)]
 
 Replaces STR with REP in FILE(s), or stdin if no files are provided or a
 target filename is '-'.
