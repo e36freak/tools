@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# sub [OPTION] STR REP [FILE(s)]
+# 
+# Replaces STR with REP in FILE(s), or stdin if no files are provided or a
+# target filename is '-'.
+# 
+#  Options:
+#   -h, --help      display this help and exit
+#   -g, --global    replaces all instances on each line, instead of just the first
+#   -i, --in-place  edit FILE(s) in place, instead of printing to stdout. ignored
+#                   for stdin.
+# 
+# STR must be non-empty, but REP may be empty to replace STR with nothing. (note
+# that an argument is still required, but it may be the empty string)
+
+
 global=0
 in_place=0
 temps=()
