@@ -1,192 +1,405 @@
-#!/bin/bash
+#!/usr/bin/gawk -f
 
-# sub [OPTIONS] STR REP [FILE(s)]
+# usage: sub -- [OPTIONS] SEARCH REPLACE [FILE(s)]
+#        sub -- [OPTIONS] -f PATTERN_FILE [FILE(s)]
 # 
-# Replaces STR with REP in FILE(s), or stdin if no files are provided or a
-# target filename is '-'.
+# The '--' is required, so AWK itself doesn't read the options
+# 
+# In the 1st form, replace SEARCH with REPLACE in FILE(s), or stdin if no files
+# are provided or a target filename is '-'.
+# 
+# In the 2nd form, read SEARCH and REPLACE strings from PATTERN_FILE, and
+# replace each SEARCH string with the appropriate REPLACE string.
+# The file format is as follows:
+#   SEARCH
+#   REPLACE
+#   SEARCH
+#   REPLACE
+# Each REPLACE string corresponds to the SEARCH string on the previous line. If
+# '-' is used as PATTERN_FILE, the list of patterns will be read from the
+# standard input and target FILEs are required. If there is an uneven number of
+# lines, the last SEARCH string will not be used. Empty SEARCH strings and their
+# corresponding REPLACE strings will be silently ignored.
 # 
 #  Options:
-#   -h, --help      display this help and exit
-#   -g, --global    replaces all instances on each line, instead of just the first
-#   -i, --in-place  edit FILE(s) in place, instead of printing to stdout. ignored
-#                   for stdin.
+#   -f, --file FILE  read SEARCH and REPLACE strings from FILE, instead of the
+#                    positional parameters. can be used multiple times for more
+#                    than one pattern file
+#   -g, --global     replaces all matches on each line, instead of just the first
+#   -i, --in-place   edit FILE(s) in place, instead of printing to stdout. this
+#                    option is ignored when reading the standard input
+#   -h, --help       display this help and exit
 # 
-# STR must be non-empty, but REP may be empty to replace STR with nothing. (note
-# that an argument is still required, but it may be the empty string)
+# SEARCH strings must be non-empty, but REPLACE strings may be empty to replace
+# SEARCH with nothing. (note that an argument (or line with -f) is still
+# required, but it may be the empty string)
 
 
-global=0
-in_place=0
-temps=()
+## usage: getopts(optstring [, longopt_array ])
+## Parses options, and deletes them from ARGV. "optstring" is of the form
+## "ab:c". Each letter is a possible option. If the letter is followed by a
+## colon (:), then the option requires an argument. If an argument is not
+## provided, or an invalid option is given, getopts will print the appropriate
+## error message and return "?". Returns each option as it's read, and -1 when
+## no options are left. "optind" will be set to the index of the next
+## non-option argument when finished. "optarg" will be set to the option's
+## argument, when provided. If not provided, "optarg" will be empty. "optname"
+## will be set to the current option, as provided. Getopts will delete each
+## option and argument that it successfully reads, so awk will be able to treat
+## whatever's left as filenames/assignments, as usual. If provided,
+## "longopt_array" is the name of an associative array that maps long options to
+## the appropriate short option (do not include the hyphens on either).
+## Sample usage can be found in the examples dir, with gawk extensions, or in
+## the ogrep script for a POSIX example: https://github.com/e36freak/ogrep
+function getopts(optstring, longarr,    opt, trimmed, hasarg, repeat) {
+  hasarg = repeat = 0;
+  # increment optind
+  optind++;
 
-# usage: sub_literal STR REP
-# Replaces the first instance (on each line) of STR with REP, treating them as
-# literal strings and not regexes. Reads stdin and writes to stdout.
-sub_literal() {
-  # string manip needed to escape '\'s, so awk doesn't expand '\n' and such
-  awk -v str="${1//\\/\\\\}" -v rep="${2//\\/\\\\}" '
-    # get the length of the search string
-    BEGIN {
-      len = length(str);
+  # return -1 if the current arg is not an option or there are no args left
+  if (ARGV[optind] !~ /^-/ || optind >= ARGC) {
+    return -1;
+  }
+
+  # if option is "--" (end of options), delete arg and return -1
+  if (ARGV[optind] == "--") {
+    for (i=1; i<=optind; i++) {
+      delete ARGV[i];
+    }
+    return -1;
+  }
+
+  # if the option is a long argument...
+  if (ARGV[optind] ~ /^--/) {
+    # trim hyphens
+    trimmed = substr(ARGV[optind], 3);
+    # if of the format --foo=bar, split the two. assign "bar" to optarg and
+    # set hasarg to 1
+    if (trimmed ~ /.*=.*/) {
+      optarg = trimmed;
+      sub(/=.*/, "", trimmed); sub(/^[^=]*=/, "", optarg);
+      hasarg = 1;
+    }
+    
+    # invalid long opt
+    if (!(trimmed in longarr)) {
+      printf("unrecognized option -- '%s'\n", ARGV[optind]) > "/dev/stderr";
+      return "?";
     }
 
-    # if the search string is in the line
-    (i = index($0, str)) {
-      # replace the first occurance with rep
-      $0 = substr($0, 1, i-1) rep substr($0, i + len);
+    opt = longarr[trimmed];
+    # set optname by prepending dashes to the trimmed argument
+    optname = "--" trimmed;
+
+  # otherwise, it is a short option
+  } else {
+    # remove the hyphen, and get just the option letter
+    opt = substr(ARGV[optind], 2, 1);
+    # set trimmed to whatevers left
+    trimmed = substr(ARGV[optind], 3);
+
+    # invalid option
+    if (!index(optstring, opt)) {
+      printf("invalid option -- '%s'\n", opt) > "/dev/stderr";
+      return "?";
     }
 
-    # print each line
-    1
-  '
-}
+    # if there is more to the argument than just -o
+    if (length(trimmed)) {
+      # if option requires an argument, set the rest to optarg and hasarg to 1
+      if (index(optstring, opt ":")) {
+        optarg = trimmed;
+        hasarg = 1;
 
-# usage: gsub_literal STR REP
-# Replaces all instances of STR with REP, treating them as literal strings 
-# and not regexes. Reads stdin and writes to stdout
-gsub_literal() {
-  # string manip needed to escape '\'s, so awk doesn't expand '\n' and such
-  awk -v str="${1//\\/\\\\}" -v rep="${2//\\/\\\\}" '
-    # get the length of the search string
-    BEGIN {
-      len = length(str);
-    }
-
-    {
-      # empty the output string
-      out = "";
-
-      # continue looping while the search string is in the line
-      while (i = index($0, str)) {
-        # append everything up to the search string, and the replacement string
-        out = out substr($0, 1, i-1) rep;
-
-        # remove everything up to and including the first instance of the
-        # search string from the line
-        $0 = substr($0, i + len);
+      # otherwise, prepend a hyphen to the rest and set repeat to 1, so the
+      # same arg is processed again without the first option
+      } else {
+        ARGV[optind] = "-" trimmed;
+        repeat = 1;
       }
-
-      # append whatever is left
-      out = out $0;
-
-      print out;
     }
-  '
+
+    # set optname by prepending a hypen to opt
+    optname = "-" opt;
+  }
+
+  # if the option requires an arg and hasarg is 0
+  if (index(optstring, opt ":") && !hasarg) {
+    # increment optind, check if no arguments are left
+    if (++optind >= ARGC) {
+      printf("option requires an argument -- '%s'\n", optname) > "/dev/stderr";
+      return "?";
+    }
+
+    # set optarg
+    optarg = ARGV[optind];
+
+  # if repeat is set, decrement optind so we process the same arg again
+  # mutually exclusive to needing an argument, otherwise hasarg would be set
+  } else if (repeat) {
+    optind--;
+  }
+
+  # delete all arguments up to this point, just to make sure
+  for (i=1; i<=optind; i++) {
+    delete ARGV[i];
+  }
+
+  # return the option letter
+  return opt;
 }
 
-# usage: do_sub STR REP
-# calls sub_literal or gsub_literal based on the "$global" variable
-do_sub() {
-  if ((global)); then
-    gsub_literal "$@"
-  else
-    sub_literal "$@"
-  fi
+## usage: lsub(str, repl [, in])
+## substites the string "repl" in place of the first instance of "str" in the
+## string "in" and returns the result. does not modify the original string.
+## if "in" is not provided, uses $0.
+function lsub(str, rep, val,    len, i) {
+  # if "in" is not provided, use $0
+  if (!length(val)) {
+    val = $0;
+  }
+
+  # get the length of val, in order to know how much of the string to remove
+  if (!(len = length(str))) {
+    # if "str" is empty, just prepend "rep" and return
+    val = rep val;
+    return val;
+  }
+
+  # substitute val for rep
+  if (i = index(val, str)) {
+    val = substr(val, 1, i - 1) rep substr(val, i + len);
+  }
+
+  # return the result
+  return val;
 }
 
-# print usage
-usage() {
-cat <<'EOF'
-sub [OPTIONS] STR REP [FILE(s)]
+## usage: glsub(str, repl [, in])
+## behaves like lsub, except it replaces all occurances of "str"
+function glsub(str, rep, val,    out, len, i, a, l) {
+  # if "in" is not provided, use $0
+  if (!length(val)) {
+    val = $0;
+  }
+  # empty the output string
+  out = "";
 
-Replaces STR with REP in FILE(s), or stdin if no files are provided or a
-target filename is '-'.
+  # get the length of val, in order to know how much of the string to remove
+  if (!(len = length(str))) {
+    # if "str" is empty, adds "rep" between every character and returns
+    l = split(val, a, //);
+    for (i=1; i<=l; i++) {
+      out = out rep a[i];
+    }
 
- Options:
-  -h, --help      display this help and exit
-  -g, --global    replaces all instances on each line, instead of just the first
-  -i, --in-place  edit FILE(s) in place, instead of printing to stdout. ignored
-                  for stdin.
+    return out rep;
+  }
 
-STR must be non-empty, but REP may be empty to replace STR with nothing. (note
-that an argument is still required, but it may be the empty string)
-EOF
+  # loop while 'val' is in 'str'
+  while (i = index(val, str)) {
+    # append everything up to the search string, and the replacement, to out
+    out = out substr(val, 1, i - 1) rep;
+    # remove everything up to and including the first instance of str from val
+    val = substr(val, i + len);
+  }
+
+  # append whatever is left in val to out and return
+  return out val;
 }
 
-# option string, for short options.
-# very much like getopts, any option followed by a ':' takes a required arg
-optstring=hgi
+## usage: shell_esc(string)
+## returns the string escaped so that it can be used in a shell command
+function shell_esc(str) {
+  gsub(/'/, "'\\''", str);
 
-# iterate over options, breaking -ab into -a -b and --foo=bar into --foo bar
-# also turns -- into --endopts to avoid issues with things like wget -O-
-while (($#)); do
-  case $1 in
-    # if option is of type -ab
-    -[!-]?*)
-      # loop over each character starting with the second
-      for ((i=1; i<${#1}; i++)); do
-        c=${1:i:1}
-        
-        # add current char to options
-        options+=("-$c")
+  return "'" str "'";
+}
 
-        # if option takes a required argument, and it's not the last char
-        # make the rest of the string its argument
-        if [[ $optstring = *"$c:"* && ${1:i+1} ]]; then
-          options+=("${1:i+1}")
-          break
-        fi
-      done
-      ;;
-    # if option is of type --foo=bar, split on first '='
-    --?*=*) options+=("${1%%=*}" "${1#*=}");;
-    # add --endopts for --
-    --) options+=(--endopts);;
-    # otherwise, nothing special
-    *) options+=("$1");;
-  esac
+# print usage info
+function usage() {
+  printf("%s\n%s\n\n%s\n\n%s\n%s\n\n",
+"usage: sub -- [OPTIONS] SEARCH REPLACE [FILE(s)]",
+"       sub -- [OPTIONS] -f PATTERN_FILE [FILE(s)]",
+"The '--' is required, so AWK itself doesn't read the options",
+"In the 1st form, replace SEARCH with REPLACE in FILE(s), or stdin if no files",
+"are provided or a target filename is '-'." \
+  ) > "/dev/stderr";
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+"In the 2nd form, read SEARCH and REPLACE strings from PATTERN_FILE, and",
+"replace each SEARCH string with the appropriate REPLACE string.",
+"The file format is as follows:",
+"  SEARCH", "  REPLACE", "  SEARCH", "  REPLACE",
+"Each REPLACE string corresponds to the SEARCH string on the previous line. If",
+"'-' is used as PATTERN_FILE, the list of patterns will be read from the",
+"standard input and target FILEs are required. If there is an uneven number of",
+"lines, the last SEARCH string will not be used. Empty SEARCH strings and their",
+"corresponding REPLACE strings will be silently ignored." \
+  ) > "/dev/stderr";
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+" Options:",
+"  -f, --file FILE  read SEARCH and REPLACE strings from FILE, instead of the",
+"                   positional parameters. can be used multiple times for more",
+"                   than one pattern file",
+"  -g, --global     replaces all matches on each line, instead of just the first",
+"  -i, --in-place   edit FILE(s) in place, instead of printing to stdout. this",
+"                   option is ignored when reading the standard input",
+"  -h, --help       display this help and exit" \
+  ) > "/dev/stderr";
+  printf("%s\n%s\n%s\n",
+"SEARCH strings must be non-empty, but REPLACE strings may be empty to replace",
+"SEARCH with nothing. (note that an argument (or line with -f) is still",
+"required, but it may be the empty string)" \
+  ) > "/dev/stderr";
+}
 
-  shift
-done
-# set new positional parameters to altered options
-set -- "${options[@]}"
-unset options
+BEGIN {
+  # initialize variables to defaults
+  err = global = in_place = has_patts = patterns = patts_from_stdin = 0;
 
-# actually parse the options and do stuff
-while [[ $1 = -?* ]]; do
-  case $1 in
-    -h|--help) usage >&2; exit 0;;
-    -g|--global) global=1;;
-    -i|--in-place) in_place=1;;
-    --endopts) shift; break;;
-    *) die "invalid option: \`$1'";;
-  esac
+  # map long options to short options
+  longopts["file"]     = "f";
+  longopts["global"]   = "g";
+  longopts["in-place"] = "i";
+  longopts["help"]     = "h";
 
-  shift
-done
+  # parse options
+  while ((opt = getopts("f:gih", longopts)) != -1) {
+    switch(opt) {
+      # -f, --file
+      case "f":
+        # if FILE is '-', patterns are coming from stdin
+        if (optarg = "-") {
+          patts_from_stdin = 1;
 
-[[ $1 ]] || die "no value for STR provided"
-str=$1
-[[ ${2+set} ]] || die "no value for REP provided"
-rep=$2
-shift 2
+        # otherwise, check to make sure it is a file or fifo and is readable
+        } else {
+          file = shell_esc(optarg);
+          if ((system("test -f " file) && system("test -p " file)) ||
+               system("test -r " file)) {
+            printf("%s: permission denied\n", optarg) > "/dev/stderr";
+            err = 1; exit;
+          }
+        }
 
-(($#)) || set -- -
+        # read in each pair of lines from FILE, add to array
+        while ((getline search < optarg) > 0 && (getline rep < optarg) > 0) {
+          # search string may not be empty
+          if (!length(search)) {
+            continue;
+          }
 
-((in_place)) && trap 'rm -f "${temps[@]}"' EXIT
+          patterns++;
+          searches[patterns] = search;
+          replaces[patterns] = search;
+        }
 
-for file; do
-  if [[ $file = - ]]; then
-    do_sub "$str" "$rep"
-    continue
-  fi
+        # do not use the positional parameters for the patterns
+        has_patts = 1;
+        break;
 
-  if ((in_place)); then
-    if ! [[ -f $file && -r $file && -w $file ]]; then
-      printf "\`%s' does not exist or is not readable or writable" "$file" >&2
-      continue
-    fi
+      # -g, --global
+      case "g":
+        global = 1; break;
 
-    tmp=$(mktemp) || die "could not create temp file"
-    temps+=("$tmp")
+      # -i, --in-place
+      case "i":
+        in_place = 1; break;
 
-    perms=$(stat -c '%a' "$file") || die "could not stat \`$file'"
-    do_sub < "$file" > "$tmp" || die "error performing substitutions on \`$file'"
-    mv "$tmp" "$file" || die "error overwriting \`$file'"
-    chmod "$perms" "$file" || die "error fixing permissions for \`$file'"
-  else
-    do_sub < "$file"
-  fi
-done
+      # -h, --help
+      case "h":
+        usage(); exit;
 
-# vim: ft=sh syn=sh sw=2 sts=2 et
+      # error
+      case "?":
+      default:
+        err = 1; exit;
+    }
+  }
+
+  # if -f was used, make sure everything is valid
+  if (has_patts) {
+    # if no valid patterns were in the file(s), fail
+    if (!patterns) {
+      printf("no valid SEARCH/REPLACE pairs provided\n") > "/dev/stderr";
+      err = 1; exit;
+    }
+
+    # if stdin was used, make sure there are files given
+    if (patts_from_stdin && optind >= ARGC) {
+      printf("no input file\n") > "/dev/stderr";
+      err = 1; exit;
+    }
+
+  # get SEARCH and REPLACE from ARGV if -f was not used
+  } else {
+    # increment optind
+    optind++;
+    if (optind >= ARGC || !length(ARGV[optind-1])) {
+      printf("no SEARCH or REPLACE string provided\n") > "/dev/stderr";
+      err = 1; exit;
+    }
+
+    # assign strings to array
+    patterns++;
+    searches[patterns] = ARGV[optind-1];
+    replaces[patterns] = ARGV[optind];
+
+    # delete the args
+    for (i=1; i<=optind; i++) {
+      delete ARGV[i];
+    }
+  }
+}
+
+# before reading each input file, if -i was passed, create a temp file
+BEGINFILE {
+  if (in_place) {
+    cmd = "mktemp";
+    cmd | getline tmp;
+    close(cmd);
+
+    # add temp file name to the temps array
+    temps[tmp];
+  }
+}
+
+# actually do the substitutions
+{
+  # loop over each pattern pair
+  for (p=1; p<=patterns; p++) {
+    # substitute
+    if (global) {
+      $0 = glsub(searches[p], replaces[p]);
+    } else {
+      $0 = lsub(searches[p], replaces[p]);
+    }
+  }
+
+  # print line, to stdout or temp file
+  if (in_place) {
+    print > tmp;
+  } else {
+    print;
+  }
+}
+
+# after reading each file, if -i was passed, overwrite the original with
+# the temp
+ENDFILE {
+  if (in_place) {
+    close(tmp);
+    system("mv " shell_esc(tmp) " " shell_esc(FILENAME));
+  }
+}
+
+END {
+  # clean up on exit, and exit according to "err"
+  if (in_place) {
+    for (tmp in temps) {
+      system("rm -f " shell_esc(tmp));
+    }
+  }
+
+  exit err;
+}
