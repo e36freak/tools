@@ -34,10 +34,6 @@ newscript:
   creates a new script, adding the shebang and other things for you. see 
   newscript --help or usage() in the source code
 
-options.bash:
-  manual option parsing TEMPLATE for bash scripts, heavily commented with
-  explanations
-
 remove_old:
   removes all but the latest N files in DIR(s).
 
