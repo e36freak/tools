@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# this script is for the LESSOPEN env var, and is an "input pipe". it allows
+# less to read archives, pdfs (with pdftotext), and will use lynx -dump for html
+# to use it, set LESSOPEN='|lessopen %s'
+exec 2>/dev/null
+
+shopt -s nocasematch
+
+if [[ $1 = *.tar* ]]; then
+  if [[ $1 = *z ]]; then
+    tar tz "$1"
+  else
+    tar t "$1"
+  fi
+
+  return
+fi
+
+case "$1" in
+  *.gz) zcat "$1";;
+  *.xz) xzcat "$1";;
+  *.zip) unzip -p "$1";;
+  *.pdf) pdftotext -layout -nopgbrk "$1" -;;
+  *.html) lynx -dump "$1";;
+  *) cat "$1";;
+esac
