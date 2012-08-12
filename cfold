@@ -316,7 +316,7 @@ BEGIN {
       case "w":
         # make sure optarg is an integer
         if (optarg !~ /^[0-9]+$/) {
-          printf("'%s' is not a valid argument for '%s', must be a number",
+          printf("'%s' is not a valid argument for '%s', must be a number\n",
                  optarg, optname) > "/dev/stderr";
           err = toexit = 1;
           exit;
