@@ -1,4 +1,4 @@
-#!/bin/awk -f
+#!/usr/bin/awk -f
 
 function to_sec(date,    t) {
   split(date, t, /:/);
