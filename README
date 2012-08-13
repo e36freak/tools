@@ -35,6 +35,10 @@ newscript:
   creates a new script, adding the shebang and other things for you. see 
   newscript --help or usage() in the source code
 
+pac_removed
+  parses the pacman logfile and lists all removed packages that have not been
+  reinstalled. see pac_removed -- -h, or the comments in the source
+
 remove_old:
   removes all but the latest N files in DIR(s).
 
