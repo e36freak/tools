@@ -449,23 +449,19 @@ END {
     exit err;
   }
 
-  # create temp file
-  cmd = "mktemp";
-  cmd | getline tmp;
-  close(cmd);
-
-  # iterate over all remaining packages and print info to sort and to tmp
-  sort = "sort -n > " shell_esc(tmp);
-  for (package in times) {
-    printf("%s %s\n", times[package], package) | sort;
+  # iterate over remaining packages and create an array with epochs and names
+  for (pkg in times) {
+    tosort[times[pkg],pkg];
   }
-  close(sort)
 
-  # read the temp file and format
-  FS = " ";
-  while ((getline < tmp) > 0) {
-    time = strftime(tsformat, $1);
-    package = $2;
+  # sort out array
+  len = asorti(tosort, out, "@ind_num_asc");
+
+  # iterate over out array, format output, and print
+  for (i=1; i<=len; i++) {
+    split(out[i], info, SUBSEP);
+    time = strftime(tsformat, info[1]);
+    package = info[2];
 
     if (quiet) {
       print package;
@@ -476,5 +472,4 @@ END {
       printf("[%s] %s %s\n", time, package, versions[package]);
     }
   }
-  close(tmp);
 }
