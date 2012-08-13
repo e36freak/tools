@@ -470,10 +470,10 @@ END {
     if (quiet) {
       print package;
     } else if (color) {
-      printf("%s(%s)%s %s%s%s %s%s%s\n", bold blue, time, reset, bold, package,
+      printf("%s%s%s %s%s%s %s%s%s\n", bold blue, time, reset, bold, package,
              reset, bold green, versions[package], reset);
     } else {
-      printf("(%s) %s %s\n", time, package, versions[package]);
+      printf("%s %s %s\n", time, package, versions[package]);
     }
   }
   close(tmp);
