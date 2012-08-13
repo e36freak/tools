@@ -257,8 +257,8 @@ else
   case $lang in
     bash)   shebang='#!/bin/bash';;
     sh)     shebang='#!/bin/sh';;
-    awk)    shebang='#!/bin/awk -f';;
-    sed)    shebang='#!/bin/sed -f';;
+    awk)    shebang='#!/usr/bin/awk -f';;
+    sed)    shebang='#!/usr/bin/sed -f';;
     perl)   shebang='#!/usr/bin/perl';;
     python) shebang='#!/usr/bin/python';;
     *) die "$lang is not an available preset language"
