@@ -137,6 +137,7 @@ function fold(str, sep, cols,    out, cmd, i, len, chars, c, last, f, first) {
 ## the ogrep script for a POSIX example: https://github.com/e36freak/ogrep
 function getopts(optstring, longarr,    opt, trimmed, hasarg, repeat) {
   hasarg = repeat = 0;
+  delete optarg;
   # increment optind
   optind++;
 
