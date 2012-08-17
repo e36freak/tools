@@ -315,4 +315,6 @@ for file in "${names[@]}"; do
 done
 
 # if -e is used, open the file(s) in the preferred editor
-((edit)) && editor "${toedit[@]}"
+if ((edit));then
+  editor "${toedit[@]}"
+fi
