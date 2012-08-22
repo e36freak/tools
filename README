@@ -22,7 +22,7 @@ flatten:
 getmtime:
   usage: getmtime FORMAT FILE [...]
   prints the mtime for each FILE given according to FORMAT. FORMAT is anything
-  valid for strftime(3)
+  valid for strftime(3), as well as %N, which will be replaced with FILE.
 
 lessopen:
   this script is for the LESSOPEN env var, and is an "input pipe". it allows

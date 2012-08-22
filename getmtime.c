@@ -38,6 +38,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "prints the mtime for each FILE given according to FORMAT\n");
     fprintf(stderr, "FORMAT is any string valid for strftime(3)\n");
     fprintf(stderr, "%%N may also be used for the filename\n");
+    /* note: %%N will have issues, it's just a literal replacement */
 
     exit(EXIT_FAILURE);
   }
