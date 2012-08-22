@@ -14,13 +14,14 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "usage: %s FORMAT FILE [...]\n\n", argv[0]);
     fprintf(stderr, "prints the mtime for each FILE given according to FORMAT\n");
     fprintf(stderr, "FORMAT is any string valid for strftime(3)\n");
+    fprintf(stderr, "%%N may also be used for the filename\n");
 
     exit(EXIT_FAILURE);
   }
 
   for (i=2; i<argc; i++) {
     if (stat(argv[i], &st) == -1) {
-      sprintf(err, "%s: %s", argv[0], argv[i]);
+      snprintf(err, 512, "%s: %s", argv[0], argv[i]);
       perror(err);
 
       exit(EXIT_FAILURE);
