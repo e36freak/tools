@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
+#include <error.h>
+#include <errno.h>
 
 /* fixed string replacement.
 usage: replace_str STRING SEARCH REP
@@ -28,7 +30,7 @@ char *replace_str(char *str, char *orig, char *rep) {
 }
 
 int main(int argc, char *argv[]) {
-  static char mtime[512], err[512];
+  static char mtime[512];
   struct stat st;
   int i;
 
@@ -47,10 +49,7 @@ int main(int argc, char *argv[]) {
   for (i=2; i<argc; i++) {
     /* stat current file, exit on error */
     if (stat(argv[i], &st) == -1) {
-      snprintf(err, 512, "%s: %s", argv[0], argv[i]);
-      perror(err);
-
-      exit(EXIT_FAILURE);
+      error(1, errno, "%s", argv[i]);
     }
 
     /* format output according to argv[1] */
