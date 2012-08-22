@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (strftime(mtime, sizeof(mtime), argv[1], localtime(&st.st_mtime)) == 0) {
-      fprintf("%s: %s: strftime error\n", argv[0], argv[i]);
+      fprintf(stderr, "%s: %s: strftime error\n", argv[0], argv[i]);
 
       exit(EXIT_FAILURE);
     }
