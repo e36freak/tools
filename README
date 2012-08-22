@@ -19,6 +19,11 @@ flatten:
   flattens a directory (recursively moves all files in sub-dirs to the current
   dir, and deletes the sub-dirs)
 
+getmtime:
+  usage: getmtime FORMAT FILE [...]
+  prints the mtime for each FILE given according to FORMAT. FORMAT is anything
+  valid for strftime(3)
+
 lessopen:
   this script is for the LESSOPEN env var, and is an "input pipe". it allows
   less to read archives, pdfs (with pdftotext), and will use lynx -dump for html
