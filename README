@@ -1,5 +1,8 @@
 These tools are written in C, bash 4, and POSIX awk.
 
+add_times:
+  adds each TIME together and prints the result to stdout.
+
 args:
   prints command line arguments given in a very readable format
 

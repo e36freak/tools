@@ -1,0 +1,112 @@
+#!/bin/bash
+
+# add_times [OPTIONS] [ TIME [ ... ] ]
+# adds each TIME together and prints the result to stdout. each TIME must be in
+# the format HH:MM. if no TIME is supplied, reads the standard input, one TIME
+# per line.
+#
+#  Options:
+#   -h, --help    Display this help and exit
+
+shopt -s extglob
+
+# default vars
+times=()   # times to add
+hrs=()     # array of hour components
+mins=()    # array of minute components
+tot_mins=0 # total minutes
+tot_hrs=0  # total hours
+
+# show the usage info
+usage() {
+cat <<'EOF'
+add_times [OPTIONS] [ TIME [ ... ] ]
+adds each TIME together and prints the result to stdout. each TIME must be in
+the format HH:MM. if no TIME is supplied, reads the standard input, one TIME
+per line.
+
+ Options:
+  -h, --help    Display this help and exit
+EOF
+}
+
+# break options into a more parsable format
+optstring=h
+unset options
+while (($#)); do
+  case $1 in
+    -[!-]?*)
+      for ((i=1; i<${#1}; i++)); do
+        c=${1:i:1}; options+=("-$c")
+
+        if [[ $optstring = *"$c:"* && ${1:i+1} ]]; then
+          options+=("${1:i+1}")
+          break
+        fi
+      done
+      ;;
+    --?*=*) options+=("${1%%=*}" "${1#*=}");;
+    --) options+=(--endopts);;
+    *) options+=("$1");;
+  esac
+
+  shift
+done
+set -- "${options[@]}"
+unset options
+
+# actually parse the options and do stuff
+while [[ $1 = -?* ]]; do
+  case $1 in
+    -h|--help) usage >&2; exit 0;;
+    --endopts) shift; break;;
+    *) die "invalid option: $1";;
+  esac
+
+  shift
+done
+
+# TIME is supplied, use the args
+if (($#)); then
+  # validate each and append to array
+  for t; do
+    if [[ $t != +([0-9]):[0-9][0-9] ]]; then
+      printf 'invalid time: %s\n' "$t"
+      exit 1
+    fi
+
+    times+=("$t")
+  done
+
+else
+# no TIME is supplied, read stdin
+  while read -r t; do
+    if [[ $t != +([0-9]):[0-9][0-9] ]]; then
+      printf 'invalid time: %s\n' "$t"
+      exit 1
+    fi
+
+    times+=("$t")
+  done
+fi
+
+# break TIMEs into hours and minutes
+hrs+=("${times[@]%:*}")
+mins+=("${times[@]#*:}")
+
+# add total minutes
+for m in "${mins[@]}"; do
+  ((tot_mins += m))
+done
+
+# get end result for mins (modulo of 60), and what to add to hrs
+tot_hrs+=$((tot_mins / 60))
+tot_mins=$((tot_mins % 60))
+
+# add each hour component to tot_hrs
+for h in "${hrs[@]}"; do
+  ((tot_hrs += h))
+done
+
+# print final time
+printf '%02d:%02d\n' "$tot_hrs" "$tot_mins"
