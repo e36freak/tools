@@ -70,7 +70,7 @@ done
 if (($#)); then
   # validate each and append to array
   for t; do
-    if [[ $t != +([0-9]):[0-9][0-9] ]]; then
+    if [[ $t != +([0-9]):[0-9][0-9] ]] || ((${t#*:} >= 60)); then
       printf 'invalid time: %s\n' "$t"
       exit 1
     fi
@@ -81,7 +81,7 @@ if (($#)); then
 else
 # no TIME is supplied, read stdin
   while read -r t; do
-    if [[ $t != +([0-9]):[0-9][0-9] ]]; then
+    if [[ $t != +([0-9]):[0-9][0-9] ]] || ((${t#*:} >= 60)); then
       printf 'invalid time: %s\n' "$t"
       exit 1
     fi
