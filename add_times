@@ -1,13 +1,23 @@
 #!/bin/bash
 
+# TODO:
+# add error handling for get_time()
+
 # add_times [OPTIONS] [ TIME [ ... ] ]
 # adds each TIME together and prints the result to stdout. each TIME must be in
-# the format HH:MM. if no TIME is supplied, reads the standard input, one TIME
-# per line.
+# the format HH:MM. if no TIME is supplied, either enters a special interactive
+# mode if stdin is open on atty, or reads TIMEs from the standard input, one
+# TIME per line.
 #
 #  Options:
 #   -h, --help    Display this help and exit
 #   -s, --seconds   Add seconds as well, TIME must be in the format HH:MM:SS
+#
+# in the interactive mode, add_times will act in the following manner:
+# if --seconds is supplied, accepts them first. then, it accepts minutes, and
+# finally hours. if an empty value for seconds or minutes (depending on
+# --seconds) is supplied, add_times stops reading input. this eases input with
+# the number pad
 
 shopt -s extglob
 
@@ -21,18 +31,94 @@ tot_secs=0 # total seconds
 tot_mins=0 # total minutes
 tot_hrs=0  # total hours
 
+# get time interactively. return 1 if input is to be ended
+# prints the time to stdout
+get_time() {
+  local h m c i
+
+  if ((seconds)); then
+    local s
+
+    read -n 2 s # read in seconds
+    # break on empty value
+    if [[ -z $s ]]; then
+      return 1
+    fi
+    printf '\r  :%02d\r' "$s" >&2 # print seconds
+    read -n 2 m # read in minutes
+    printf '\r :%02d:%02d\r' "$m" "$s" >&2 # print minutes and seconds
+    # read in hours
+    i=1
+    while read -n 1 c && [[ $c ]]; do
+      h+=$c # append to hours
+      printf '\r%*s:%02d:%02d\r%d' "$((++i))" ' ' "$m" "$s" "$h" >&2 # reprint
+    done
+    
+    # print time to stdout
+    printf '%02d:%02d:%02d\n' "$h" "$m" "$s"
+
+  # seconds was not supplied
+  else
+    read -n 2 m # read in minutes
+    # break on empty value
+    if [[ -z $m ]]; then
+      return 1
+    fi
+    printf '\r :%02d\r' "$m" >&2 # print minutes
+    # read in hours
+    i=1
+    while read -n 1 c && [[ $c ]]; do
+      h+=$c # append to hours
+      printf '\r%*s:%02d\r%d' "$((++i))" ' ' "$m" "$h" >&2 # reprint
+    done
+
+    # print time to stdout
+    printf '%02d:%02d\n' "$h" "$m"
+  fi
+
+  return 0
+}
+
 # show the usage info
 usage() {
 cat <<'EOF'
 add_times [OPTIONS] [ TIME [ ... ] ]
 adds each TIME together and prints the result to stdout. each TIME must be in
-the format HH:MM. if no TIME is supplied, reads the standard input, one TIME
-per line.
+the format HH:MM. if no TIME is supplied, either enters a special interactive
+mode if stdin is open on atty, or reads TIMEs from the standard input, one
+TIME per line.
 
  Options:
   -h, --help      Display this help and exit
   -s, --seconds   Add seconds as well, TIME must be in the format HH:MM:SS
+
+in the interactive mode, add_times will act in the following manner:
+if --seconds is supplied, accepts them first. then, it accepts minutes, and
+finally hours. if an empty value for seconds or minutes (depending on
+--seconds) is supplied, add_times stops reading input. this eases input with
+the number pad
 EOF
+}
+
+# validate a time, based on "seconds". returns 0 if valid, otherwise 1
+is_valid() {
+  local t=$1
+
+  if ((seconds)); then
+    local s m
+
+    s=${t##*:} m=${t#*:} m=${m%:*}
+    if [[ $t != +([0-9]):[0-9][0-9]:[0-9][0-9] ]] ||
+       ((s >= 60 || m >= 60)); then
+      return 1
+    fi
+  else
+    if [[ $t != +([0-9]):[0-9][0-9] ]] || ((${t#*:} >= 60)); then
+      return 1
+    fi
+  fi
+
+  return 0
 }
 
 # break options into a more parsable format
@@ -76,42 +162,38 @@ done
 if (($#)); then
   # validate each and append to array
   for t; do
-    if ((seconds)); then
-      s=${t##*:} m=${t#*:} m=${m%:*}
-      if [[ $t != +([0-9]):[0-9][0-9]:[0-9][0-9] ]] ||
-         ((s >= 60 || m >= 60)); then
-        printf 'invalid time: %s\n' "$t"
-        exit 1
-      fi
-    else
-      if [[ $t != +([0-9]):[0-9][0-9] ]] || ((${t#*:} >= 60)); then
-        printf 'invalid time: %s\n' "$t"
-        exit 1
-      fi
+    if ! is_valid "$t"; then
+      printf 'invalid time: %s\n' "$t"
+      exit 1
     fi
 
     times+=("$t")
   done
 
-# no TIME is supplied, read stdin
+# no TIME is supplied...
 else
-  while read -r t; do
-    if ((seconds)); then
-      s=${t##*:} m=${t#*:} m=${m%:*}
-      if [[ $t != +([0-9]):[0-9][0-9]:[0-9][0-9] ]] ||
-         ((s >= 60 || m >= 60)); then
+  # stdin is a tty, get them interactively
+  if [[ -t 0 ]]; then
+    while t=$(get_time); do
+      if ! is_valid "$t"; then
         printf 'invalid time: %s\n' "$t"
         exit 1
       fi
-    else
-      if [[ $t != +([0-9]):[0-9][0-9] ]] || ((${t#*:} >= 60)); then
-        printf 'invalid time: %s\n' "$t"
-        exit 1
-      fi
-    fi
 
-    times+=("$t")
-  done
+      times+=("$t")
+    done
+
+  # stdin is not a tty, just read one per line
+  else
+    while read -r t; do
+      if ! is_valid "$t"; then
+        printf 'invalid time: %s\n' "$t"
+        exit 1
+      fi
+
+      times+=("$t")
+    done
+  fi
 fi
 
 # break TIMEs into hours and minutes, and possibly seconds
