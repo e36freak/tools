@@ -7,13 +7,17 @@
 #
 #  Options:
 #   -h, --help    Display this help and exit
+#   -s, --seconds   Add seconds as well, TIME must be in the format HH:MM:SS
 
 shopt -s extglob
 
 # default vars
+seconds=0  # controls whether or not to use seconds
 times=()   # times to add
 hrs=()     # array of hour components
 mins=()    # array of minute components
+secs=()    # array of second components
+tot_secs=0 # total seconds
 tot_mins=0 # total minutes
 tot_hrs=0  # total hours
 
@@ -26,12 +30,13 @@ the format HH:MM. if no TIME is supplied, reads the standard input, one TIME
 per line.
 
  Options:
-  -h, --help    Display this help and exit
+  -h, --help      Display this help and exit
+  -s, --seconds   Add seconds as well, TIME must be in the format HH:MM:SS
 EOF
 }
 
 # break options into a more parsable format
-optstring=h
+optstring=hs
 unset options
 while (($#)); do
   case $1 in
@@ -59,6 +64,7 @@ unset options
 while [[ $1 = -?* ]]; do
   case $1 in
     -h|--help) usage >&2; exit 0;;
+    -s|--seconds) seconds=1;;
     --endopts) shift; break;;
     *) die "invalid option: $1";;
   esac
@@ -70,29 +76,63 @@ done
 if (($#)); then
   # validate each and append to array
   for t; do
-    if [[ $t != +([0-9]):[0-9][0-9] ]] || ((${t#*:} >= 60)); then
-      printf 'invalid time: %s\n' "$t"
-      exit 1
+    if ((seconds)); then
+      s=${t##*:} m=${t#*:} m=${m%:*}
+      if [[ $t != +([0-9]):[0-9][0-9]:[0-9][0-9] ]] ||
+         ((s >= 60 || m >= 60)); then
+        printf 'invalid time: %s\n' "$t"
+        exit 1
+      fi
+    else
+      if [[ $t != +([0-9]):[0-9][0-9] ]] || ((${t#*:} >= 60)); then
+        printf 'invalid time: %s\n' "$t"
+        exit 1
+      fi
     fi
 
     times+=("$t")
   done
 
-else
 # no TIME is supplied, read stdin
+else
   while read -r t; do
-    if [[ $t != +([0-9]):[0-9][0-9] ]] || ((${t#*:} >= 60)); then
-      printf 'invalid time: %s\n' "$t"
-      exit 1
+    if ((seconds)); then
+      s=${t##*:} m=${t#*:} m=${m%:*}
+      if [[ $t != +([0-9]):[0-9][0-9]:[0-9][0-9] ]] ||
+         ((s >= 60 || m >= 60)); then
+        printf 'invalid time: %s\n' "$t"
+        exit 1
+      fi
+    else
+      if [[ $t != +([0-9]):[0-9][0-9] ]] || ((${t#*:} >= 60)); then
+        printf 'invalid time: %s\n' "$t"
+        exit 1
+      fi
     fi
 
     times+=("$t")
   done
 fi
 
-# break TIMEs into hours and minutes
-hrs+=("${times[@]%:*}")
-mins+=("${times[@]#*:}")
+# break TIMEs into hours and minutes, and possibly seconds
+hrs=("${times[@]%%:*}")
+if ((seconds)); then
+  mins=("${times[@]#*:}")
+  mins=("${mins[@]%:*}")
+  secs=("${times[@]##*:}")
+else
+  mins=("${times[@]#*:}")
+fi
+
+# if seconds is used, add totals, get end result, and add what's needed to mins
+if ((seconds)); then
+  for s in "${secs[@]}"; do
+    ((tot_secs += s))
+  done
+
+  tot_mins+=$((tot_secs / 60))
+  tot_secs=$((tot_secs % 60))
+fi
 
 # add total minutes
 for m in "${mins[@]}"; do
@@ -109,4 +149,8 @@ for h in "${hrs[@]}"; do
 done
 
 # print final time
-printf '%02d:%02d\n' "$tot_hrs" "$tot_mins"
+if ((seconds)); then
+  printf '%02d:%02d:%02d\n' "$tot_hrs" "$tot_mins" "$tot_secs"
+else
+  printf '%02d:%02d\n' "$tot_hrs" "$tot_mins"
+fi
