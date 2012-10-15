@@ -10,8 +10,9 @@
 # TIME per line.
 #
 #  Options:
-#   -h, --help    Display this help and exit
+#   -h, --help      Display this help and exit
 #   -s, --seconds   Add seconds as well, TIME must be in the format HH:MM:SS
+#   -S, --subtract  Subtract each number, instead of adding
 #
 # in the interactive mode, add_times will act in the following manner:
 # if --seconds is supplied, accepts them first. then, it accepts minutes, and
@@ -22,6 +23,7 @@
 shopt -s extglob
 
 # default vars
+oper=add   # operation to perform
 seconds=0  # controls whether or not to use seconds
 times=()   # times to add
 hrs=()     # array of hour components
@@ -105,6 +107,7 @@ TIME per line.
  Options:
   -h, --help      Display this help and exit
   -s, --seconds   Add seconds as well, TIME must be in the format HH:MM:SS
+  -S, --subtract  Subtract each number, instead of adding
 
 in the interactive mode, add_times will act in the following manner:
 if --seconds is supplied, accepts them first. then, it accepts minutes, and
@@ -136,7 +139,7 @@ is_valid() {
 }
 
 # break options into a more parsable format
-optstring=hs
+optstring=hsS
 unset options
 while (($#)); do
   case $1 in
@@ -165,6 +168,7 @@ while [[ $1 = -?* ]]; do
   case $1 in
     -h|--help) usage >&2; exit 0;;
     -s|--seconds) seconds=1;;
+    -S|--subtract) oper=sub;;
     --endopts) shift; break;;
     *) die "invalid option: $1";;
   esac
@@ -210,43 +214,55 @@ else
   fi
 fi
 
-# break TIMEs into hours and minutes, and possibly seconds
-hrs=("${times[@]%%:*}")
-if ((seconds)); then
-  mins=("${times[@]#*:}")
-  mins=("${mins[@]%:*}")
-  secs=("${times[@]##*:}")
-else
-  mins=("${times[@]#*:}")
-fi
+# add or subtract based on $oper
+case $oper in
+  add)
+    # break TIMEs into hours and minutes, and possibly seconds
+    hrs=("${times[@]%%:*}")
+    if ((seconds)); then
+      mins=("${times[@]#*:}")
+      mins=("${mins[@]%:*}")
+      secs=("${times[@]##*:}")
+    else
+      mins=("${times[@]#*:}")
+    fi
 
-# if seconds is used, add totals, get end result, and add what's needed to mins
-if ((seconds)); then
-  for s in "${secs[@]}"; do
-    ((tot_secs += s))
-  done
+    # if seconds is used, add totals, get end result, and add what's needed to mins
+    if ((seconds)); then
+      for s in "${secs[@]}"; do
+        ((tot_secs += s))
+      done
 
-  tot_mins+=$((tot_secs / 60))
-  tot_secs=$((tot_secs % 60))
-fi
+      tot_mins+=$((tot_secs / 60))
+      tot_secs=$((tot_secs % 60))
+    fi
 
-# add total minutes
-for m in "${mins[@]}"; do
-  ((tot_mins += m))
-done
+    # add total minutes
+    for m in "${mins[@]}"; do
+      ((tot_mins += m))
+    done
 
-# get end result for mins (modulo of 60), and what to add to hrs
-tot_hrs+=$((tot_mins / 60))
-tot_mins=$((tot_mins % 60))
+    # get end result for mins (modulo of 60), and what to add to hrs
+    tot_hrs+=$((tot_mins / 60))
+    tot_mins=$((tot_mins % 60))
 
-# add each hour component to tot_hrs
-for h in "${hrs[@]}"; do
-  ((tot_hrs += h))
-done
+    # add each hour component to tot_hrs
+    for h in "${hrs[@]}"; do
+      ((tot_hrs += h))
+    done
 
-# print final time
-if ((seconds)); then
-  printf '%02d:%02d:%02d\n' "$tot_hrs" "$tot_mins" "$tot_secs"
-else
-  printf '%02d:%02d\n' "$tot_hrs" "$tot_mins"
-fi
+    # print final time
+    if ((seconds)); then
+      printf '%02d:%02d:%02d\n' "$tot_hrs" "$tot_mins" "$tot_secs"
+    else
+      printf '%02d:%02d\n' "$tot_hrs" "$tot_mins"
+    fi
+    ;;
+  sub)
+    ;;
+  # somehow, oper is invalid (should never happen)
+  *)
+    printf 'invalid operation: %s\n' "$oper" >&2
+    exit 1
+    ;;
+esac

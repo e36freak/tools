@@ -1,0 +1,232 @@
+#!/bin/bash
+
+# noclobber [OPTIONS] FILE
+# 
+# Appends a numeric suffix to FILE, incrementing it until the resulting filename
+# no longer exists. Prints the result to the standard output. If FILE already has
+# an extension, adds the number before that extension. For example, if FILE is
+# `my_file.txt', a possible result would be `my_file.1.txt'.
+# 
+#  Options:
+#   -p, --padding NUM     0-pads the numeric suffix to NUM digits. By default, no
+#                         padding is used. NUM must be a positive integer.
+#   -e, --extension EXT   Use EXT as the extension, adding the number before it.
+#                         By default, the extension used is the shortest match
+#                         from the end starting with `.'. If EXT is not at the
+#                         end of FILE, it will be ignored and the number will be
+#                         added to the end.
+#   -i, --ignore-ext      Ignore any existing extension, and always append the
+#                         number to the end of the filename. This option will
+#                         override --extension.
+#   -s, --separator SEP   Use SEP instead of `.' for the character before the
+#                         number. For example, if SEP is `-', and FILE is 
+#                         `my_file.txt', a possible result would be
+#                         `my_file-1.txt'. SEP is required, but may be empty
+#                         This is not used in determining the extension, only for
+#                         adding the number.
+#   -n, --start NUM       Number to start with, for the appended number. Must be
+#                         a positive integer. The default is 1.
+#   -h, --help            Display this help and exit
+#
+# Only one FILE may be provided. If more are supplied, only the first will be
+# used.
+#
+# Note that using this script is not atomic, there is a possibility of a race
+# condition. If you want to safely create a temp file, use mktemp(1) or
+# similar. See http://mywiki.wooledge.org/BashFAQ/062 for more info.
+
+
+################################################################################
+
+shopt -s extglob
+
+# initialize variables
+padding=0       # number of digits to pad the resulting suffix to
+user_ext=0      # bool, whether or not a user-supplied EXT was provided
+extension=      # user-supplied file extension
+has_ext=0       # bool, whether or we care about an extension at all
+ignore_ext=0    # bool, whether or not to ignore the extension
+sep=.           # character to add before the number
+base=           # filename sans extension
+ext=            # determined extension
+final=          # final filename
+num=1           # number to append, if any
+
+# ...usage
+usage() {
+cat <<'EOF'
+noclobber [OPTIONS] FILE
+
+Appends a numeric suffix to FILE, incrementing it until the resulting filename
+no longer exists. Prints the result to the standard output. If FILE already has
+an extension, adds the number before that extension. For example, if FILE is
+`my_file.txt', a possible result would be `my_file.1.txt'.
+
+ Options:
+  -p, --padding NUM     0-pads the numeric suffix to NUM digits. By default, no
+                        padding is used. NUM must be a positive integer.
+  -e, --extension EXT   Use EXT as the extension, adding the number before it.
+                        By default, the extension used is the shortest match
+                        from the end starting with `.'. If EXT is not at the
+                        end of FILE, it will be ignored and the number will be
+                        added to the end.
+  -i, --ignore-ext      Ignore any existing extension, and always append the
+                        number to the end of the filename. This option will
+                        override --extension.
+  -s, --separator SEP   Use SEP instead of `.' for the character before the
+                        number. For example, if SEP is `-', and FILE is 
+                        `my_file.txt', a possible result would be
+                        `my_file-1.txt'. SEP is required, but may be empty.
+                        This is not used in determining the extension, only for
+                        adding the number.
+  -n, --start NUM       Number to start with, for the appended number. Must be
+                        a positive integer. The default is 1.
+  -h, --help            Display this help and exit
+
+Only one FILE may be provided. If more are supplied, only the first will be
+used.
+
+Note that using this script is not atomic, there is a possibility of a race
+condition. If you want to safely create a temp file, use mktemp(1) or
+similar. See http://mywiki.wooledge.org/BashFAQ/062 for more info.
+EOF
+}
+
+# option string, for short options.
+# very much like getopts, any option followed by a ':' takes a required arg
+optstring=hp:e:is:n:
+
+unset options
+while (($#)); do
+  case $1 in
+    -[!-]?*)
+      for ((i=1; i<${#1}; i++)); do
+        c=${1:i:1}; options+=("-$c")
+        if [[ $optstring = *"$c:"* && ${1:i+1} ]]; then
+          options+=("${1:i+1}")
+          break
+        fi
+      done
+      ;;
+    --?*=*) options+=("${1%%=*}" "${1#*=}");;
+    --) options+=(--endopts);;
+    *) options+=("$1");;
+  esac
+
+  shift
+done
+set -- "${options[@]}"
+unset options
+
+# actually parse the options and do stuff
+while [[ $1 = -?* ]]; do
+  case $1 in
+    -p|--padding)
+      # validate NUM
+      if [[ -z $2 || $2 = *[!0-9]* ]]; then
+        printf "invalid NUM for \`%s': \`%s'\n" "$1" "$2" >&2
+        exit 1
+      fi
+
+      padding=$2
+      shift
+      ;;
+    -e|--extension)
+      # die if no EXT is provided
+      if [[ -z $2 ]]; then
+        printf "no EXT supplied for \`%s'\n" "$1" >&2
+        exit 1
+      fi
+
+      user_ext=1
+      extension=$2
+      shift
+      ;;
+    -i|--ignore-ext) ignore_ext=1;;
+    -s|--separator)
+      # die if no SEP is provided
+      if [[ -z ${2+set} ]]; then
+        printf "no SEP supplied for \`%s'\n" "$1" >&2
+        exit 1
+      fi
+
+      sep=$2
+      shift
+      ;;
+    -n|--start)
+      # validate NUM
+      if [[ -z $2 || $2 = *[!0-9]* ]]; then
+        printf "invalid NUM for \`%s': \`%s'\n" "$1" "$2" >&2
+        exit 1
+      fi
+
+      num=$2
+      shift
+      ;;
+    -h|--help) usage >&2; exit 0;;
+    --endopts) shift; break;;
+    *) die "invalid option: $1";;
+  esac
+
+  shift
+done
+
+# check to make sure FILE is provided
+if [[ -z $1 ]]; then
+  printf 'No FILE provided\n' >&2
+  exit 1
+fi
+
+# if FILE doesn't exist yet, just print the original and exit
+if [[ ! -e $1 ]]; then
+  printf '%s\n' "$1"
+  exit 0
+fi
+
+# determine if FILE has an extension we care about and split it accordingly
+
+# to be ignored, just skip any other checks
+if ((ignore_ext)); then
+  has_ext=0
+
+# user supplied an extension
+elif ((user_ext)); then
+  if [[ $1 = *"$extension" ]]; then
+    has_ext=1
+    base=${1%"$extension"}
+    ext=$extension
+  else
+    has_ext=0
+  fi
+
+# otherwise, check if there's an extension
+else
+  if [[ $1 = *+([^/]).*([^/]) ]]; then
+    has_ext=1
+    base=${1%.*}
+    ext=.${1##*.}
+  else
+    has_ext=0
+  fi
+fi
+
+# actually generate the new filename
+final=$1
+
+# if there's an extension, append the number beforehand
+if ((has_ext)); then
+  while [[ -e $final ]]; do
+    printf -v final '%s%s%0*d%s' "$base" "$sep" "$padding" "$((num++))" "$ext"
+    #final=$base$sep$((num++))$ext
+  done
+
+# otherwise, just stick it on the end
+else
+  while [[ -e $final ]]; do
+    printf -v final '%s%s%0*d' "$1" "$sep" "$padding" "$((num++))"
+    #final=$1$sep$((num++))
+  done
+fi
+
+# print the damn thing already
+printf '%s\n' "$final"

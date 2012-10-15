@@ -8,6 +8,13 @@
 #include <error.h>
 #include <errno.h>
 
+/* usage: rep_filename STRING CHAR FILENAME
+replaces a %c specifier with a filename (only the first). CHAR is 'c'
+returns the result */
+char *rep_filename(char *str; char *tok, char *fn) {
+  
+}
+
 /* fixed string replacement.
 usage: replace_str STRING SEARCH REP
 returns the result */
