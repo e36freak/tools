@@ -25,7 +25,7 @@
 #                         This is not used in determining the extension, only for
 #                         adding the number.
 #   -n, --start NUM       Number to start with, for the appended number. Must be
-#                         a positive integer. The default is 1.
+#                         an integer. The default is 1.
 #   -h, --help            Display this help and exit
 #
 # Only one FILE may be provided. If more are supplied, only the first will be
@@ -80,7 +80,7 @@ an extension, adds the number before that extension. For example, if FILE is
                         This is not used in determining the extension, only for
                         adding the number.
   -n, --start NUM       Number to start with, for the appended number. Must be
-                        a positive integer. The default is 1.
+                        an integer. The default is 1.
   -h, --help            Display this help and exit
 
 Only one FILE may be provided. If more are supplied, only the first will be
@@ -155,7 +155,7 @@ while [[ $1 = -?* ]]; do
       ;;
     -n|--start)
       # validate NUM
-      if [[ -z $2 || $2 = *[!0-9]* ]]; then
+      if [[ -z $2 || $2 != ?(-)+([0-9]) ]]; then
         printf "invalid NUM for \`%s': \`%s'\n" "$1" "$2" >&2
         exit 1
       fi
