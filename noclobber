@@ -222,10 +222,10 @@ if ((ignore_ext)); then
 
 # user supplied an extension
 elif ((user_ext)); then
-  if [[ $1 = *"$extension" ]]; then
+  if [[ $1 =~ "$extension"$ ]]; then
     has_ext=1
-    base=${1%"$extension"}
-    ext=$extension
+    base=${1%"${BASH_REMATCH[0]}"}
+    ext=${BASH_REMATCH[0]}
   else
     has_ext=0
   fi
