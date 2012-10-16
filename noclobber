@@ -8,7 +8,7 @@
 # `my_file.txt', a possible result would be `my_file.1.txt'.
 # 
 #  Options:
-#   -p, --padding NUM     0-pads the numeric suffix to NUM digits. By default, no
+#   -p, --padding NUM     0-pad the numeric suffix to NUM digits. By default, no
 #                         padding is used. NUM must be a positive integer.
 #   -e, --extension EXT   Use EXT as the extension, adding the number before it.
 #                         By default, the extension used is the shortest match
@@ -24,7 +24,7 @@
 #                         `my_file-1.txt'. SEP is required, but may be empty
 #                         This is not used in determining the extension, only for
 #                         adding the number.
-#   -n, --start NUM       Number to start with, for the appended number. Must be
+#   -n, --start NUM       Start incrementing the appended number with NUM. Must be
 #                         an integer. The default is 1.
 #   -h, --help            Display this help and exit
 #
@@ -63,7 +63,7 @@ an extension, adds the number before that extension. For example, if FILE is
 `my_file.txt', a possible result would be `my_file.1.txt'.
 
  Options:
-  -p, --padding NUM     0-pads the numeric suffix to NUM digits. By default, no
+  -p, --padding NUM     0-pad the numeric suffix to NUM digits. By default, no
                         padding is used. NUM must be a positive integer.
   -e, --extension EXT   Use EXT as the extension, adding the number before it.
                         By default, the extension used is the shortest match
@@ -79,7 +79,7 @@ an extension, adds the number before that extension. For example, if FILE is
                         `my_file-1.txt'. SEP is required, but may be empty.
                         This is not used in determining the extension, only for
                         adding the number.
-  -n, --start NUM       Number to start with, for the appended number. Must be
+  -n, --start NUM       Start incrementing the appended number with NUM. Must be
                         an integer. The default is 1.
   -h, --help            Display this help and exit
 
@@ -177,7 +177,7 @@ if [[ -z $1 ]]; then
   exit 1
 fi
 
-# if FILE doesn't exist yet, just print the original and exit
+# if FILE doesn't exist, just print the original and exit
 if [[ ! -e $1 ]]; then
   printf '%s\n' "$1"
   exit 0
@@ -217,14 +217,12 @@ final=$1
 if ((has_ext)); then
   while [[ -e $final ]]; do
     printf -v final '%s%s%0*d%s' "$base" "$sep" "$padding" "$((num++))" "$ext"
-    #final=$base$sep$((num++))$ext
   done
 
 # otherwise, just stick it on the end
 else
   while [[ -e $final ]]; do
     printf -v final '%s%s%0*d' "$1" "$sep" "$padding" "$((num++))"
-    #final=$1$sep$((num++))
   done
 fi
 
