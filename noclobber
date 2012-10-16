@@ -26,6 +26,9 @@
 #                         adding the number.
 #   -n, --start NUM       Start incrementing the appended number with NUM. Must be
 #                         an integer. The default is 1.
+#   -c, --ignore-case     Perform a case-insensitive test for the existence of
+#                         FILE. By default, the test is case sensitive. This also
+#                         extends to the test for EXT when using --extension.
 #   -h, --help            Display this help and exit
 #
 # Only one FILE may be provided. If more are supplied, only the first will be
@@ -46,11 +49,30 @@ user_ext=0      # bool, whether or not a user-supplied EXT was provided
 extension=      # user-supplied file extension
 has_ext=0       # bool, whether or we care about an extension at all
 ignore_ext=0    # bool, whether or not to ignore the extension
+ignore_case=0   # bool, whether or not perform case-insensitive tests
 sep=.           # character to add before the number
 base=           # filename sans extension
 ext=            # determined extension
 final=          # final filename
 num=1           # number to append, if any
+
+# usage: f_exists FILE
+# returns 0 if FILE exists, 1 if not. Performs the test based on "$ignore_case"
+f_exists() {
+  # case insensitive test, use a subshell so the shopt doesn't persist
+  if ((ignore_case)); then
+    (
+      shopt -s nocaseglob
+      f=( "$1"?() )
+
+      ((${#f[@]}))
+    )
+
+  # case sensitive test, simply use test -e
+  else
+    [[ -e $1 ]]
+  fi
+}
 
 # ...usage
 usage() {
@@ -81,6 +103,9 @@ an extension, adds the number before that extension. For example, if FILE is
                         adding the number.
   -n, --start NUM       Start incrementing the appended number with NUM. Must be
                         an integer. The default is 1.
+  -c, --ignore-case     Perform a case-insensitive test for the existence of
+                        FILE. By default, the test is case sensitive. This also
+                        extends to the test for EXT when using --extension.
   -h, --help            Display this help and exit
 
 Only one FILE may be provided. If more are supplied, only the first will be
@@ -94,7 +119,7 @@ EOF
 
 # option string, for short options.
 # very much like getopts, any option followed by a ':' takes a required arg
-optstring=hp:e:is:n:
+optstring=p:e:is:n:ch
 
 unset options
 while (($#)); do
@@ -163,6 +188,7 @@ while [[ $1 = -?* ]]; do
       num=$2
       shift
       ;;
+    -c|--ignore-case) ignore_case=1;;
     -h|--help) usage >&2; exit 0;;
     --endopts) shift; break;;
     *) die "invalid option: $1";;
@@ -178,9 +204,14 @@ if [[ -z $1 ]]; then
 fi
 
 # if FILE doesn't exist, just print the original and exit
-if [[ ! -e $1 ]]; then
+if ! f_exists "$1"; then
   printf '%s\n' "$1"
   exit 0
+fi
+
+# set nocasematch if ignore_case is used
+if ((ignore_case)); then
+  shopt -s nocasematch
 fi
 
 # determine if FILE has an extension we care about and split it accordingly
@@ -215,13 +246,13 @@ final=$1
 
 # if there's an extension, append the number beforehand
 if ((has_ext)); then
-  while [[ -e $final ]]; do
+  while f_exists "$final"; do
     printf -v final '%s%s%0*d%s' "$base" "$sep" "$padding" "$((num++))" "$ext"
   done
 
 # otherwise, just stick it on the end
 else
-  while [[ -e $final ]]; do
+  while f_exists "$final"; do
     printf -v final '%s%s%0*d' "$1" "$sep" "$padding" "$((num++))"
   done
 fi
