@@ -50,6 +50,11 @@ noclobber:
   `my_file.txt', a possible result would be `my_file.1.txt'. See noclobber -h,
   or the comments in the source
 
+nsplit:
+  numeric version of split(1) written in POSIX awk. must be called with
+  nsplit -- [OPTIONS] [FILE ...] (the -- is required). see nsplit -- -h, or the
+  comments in the source
+
 pac_removed:
   parses the pacman logfile and lists all removed packages that have not been
   reinstalled. see pac_removed -- -h, or the comments in the source
