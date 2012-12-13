@@ -43,7 +43,19 @@ newscript:
   creates a new script, adding the shebang and other things for you. see 
   newscript --help or usage() in the source code
 
-pac_removed
+noclobber:
+  Appends a numeric suffix to FILE, incrementing it until the resulting filename
+  no longer exists. Prints the result to the standard output. If FILE already has
+  an extension, adds the number before that extension. For example, if FILE is
+  `my_file.txt', a possible result would be `my_file.1.txt'. See noclobber -h,
+  or the comments in the source
+
+nsplit:
+  numeric version of split(1) written in POSIX awk. must be called with
+  nsplit -- [OPTIONS] [FILE ...] (the -- is required). see nsplit -- -h, or the
+  comments in the source
+
+pac_removed:
   parses the pacman logfile and lists all removed packages that have not been
   reinstalled. see pac_removed -- -h, or the comments in the source
 
@@ -70,7 +82,7 @@ TODO:
 
 
 
-Copyright Daniel Mills <danielmills1@gmail.com>
+Copyright Daniel Mills <dm@e36freak.com>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
