@@ -34,6 +34,10 @@
 # SEARCH with nothing. (note that an argument (or line with -f) is still
 # required, but it may be the empty string)
 
+# TODO:
+#  rewrite for POSIX
+
+
 
 ## usage: getopts(optstring [, longopt_array ])
 ## Parses options, and deletes them from ARGV. "optstring" is of the form
