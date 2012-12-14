@@ -62,7 +62,6 @@ pac_removed:
 psort:
   sort implementation that allows prioritizing the sort by pattern.
   see psort -- -h, or the comments in the source
-  still in progress
 
 remove_old:
   removes all but the latest N files in DIR(s).

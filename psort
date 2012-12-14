@@ -59,8 +59,8 @@
 #  best tool to use on very large inputs.
 
 # TODO:
-#   allow KEYs similar to sort(1)
-#   add -z
+#   add -z (not sure if this can be done POSIXly)
+#   use temp files to allow larger inputs
 
 
 
@@ -150,8 +150,8 @@ function __pquicksort(array, left, right, patts, plen, opts,    piv, mid, tmp) {
   array[left] = tmp;
   
   # recursively sort the two halves
-  __pquicksort(array, left, mid - 1, patts, plen);
-  __pquicksort(array, mid + 1, right, patts, plen);
+  __pquicksort(array, left, mid - 1, patts, plen, opts);
+  __pquicksort(array, mid + 1, right, patts, plen, opts);
 }
 
 ## usage: extract_range(string, start, stop)
@@ -363,10 +363,6 @@ function mainsort(arr, alen, patts, plen, keynum,
     for (i in options) {
       opts[i] = options[i];
     }
-  }
-
-  for (i in opts) {
-    print i, opts[i];
   }
 
   # generate temporary pattern array for the current key
