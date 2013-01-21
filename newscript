@@ -70,14 +70,14 @@ err() {
 }
 
 # usage: editor FILE ...
-# open editor (if user supplied), VISUAL, EDITOR, or "vi", in that order
+# exec editor (if user supplied), VISUAL, EDITOR, or "vi", in that order
 editor() {
   if ((user_editor)); then
-    $editor "$@"
+    exec $editor "$@"
   elif [[ $VISUAL ]]; then
-    $VISUAL "$@"
+    exec $VISUAL "$@"
   else
-    ${EDITOR:-vi} "$@"
+    exec ${EDITOR:-vi} "$@"
   fi
 }
 
