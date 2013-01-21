@@ -6,6 +6,12 @@ add_times:
 args:
   prints command line arguments given in a very readable format
 
+bar_graph:
+  Creates a bar graph of the categories and values in FILE(s) (or the standard
+  input if no files are named, or if a single hyphen (-) is given), reading the
+  first field as the category and the second as the value. Must be called with
+  bar_grap -- [OPTIONS] [FILE...] (the -- is required). See bar_graph -- -h
+
 cfold:
   Wraps input lines in each FILE (standard input if not provided), writing to
   standard output. Also included (although slightly different) in awk-libs as

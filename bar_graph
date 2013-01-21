@@ -1,0 +1,1101 @@
+#!/usr/bin/awk -f
+
+# TODO:
+# --total?
+# option to turn scale on or off?
+# labels?
+
+# Usage: bar_graph -- [OPTIONS] [FILE...]
+#
+# The '--' is required, so AWK itself doesn't read the options.
+#
+# Creates a bar graph of the categories and values in FILE(s) (or the standard
+# input if no files are named, or if a single hyphen (-) is given), reading the
+# first field as the category and the second as the value. If multiple lines
+# with the same category exist, the values are added as each is encountered.
+# Negative values will be treated as zero. The graph width is determined by the
+# terminal width. If the standard input is not a terminal, and --width is not
+# used, the default is 80 characters.
+#
+#  Options:
+#   -d, --delim PATT     Use the AWK style regular expression PATT as the field
+#                        separator. If -d is not provided, non-blank to blank
+#                        transitions are used. Works the same way as AWK's FS.
+#   -t, --title TITLE    Add the title TITLE to the graph
+#   -b, --bar STRING     Use STRING for the bars of the graph, instead of "=",
+#                        by repeating it as needed. May use a partial value if
+#                        STRING is not a single character
+#   -n, --nums           Use the values (or percentages, if -p is used) as the
+#                        final part of the bar
+#   -p, --percent        Graph values as percentages of the largest (largest
+#                        value being 100%)
+#   -P, --percent-tot    Graph values as percentages of the total
+#   -s, --sort[=HOW]     Sort the categories, according to HOW, if provided. If
+#                        not provided, the default is "std asc". Values for HOW
+#                        are explained below
+#   -i, --ignorecase     Ignore the case of the categories. The case used for
+#                        the category in the graph will be that of the first
+#                        encountered in the data
+#   -w, --width WIDTH    Force a graph width of WIDTH. WIDTH is an integer >= 40
+#   -S, --stty           Use "stty size" to determine the terminal width instead
+#                        of "tput cols"
+#   -c, --color[=WHEN]   Use colored output. WHEN is always, auto, or never
+#   -B, --bold[=WHEN]    Format the output using boldness. WHEN is always, auto,
+#                        or never
+#   -C, --colors STRING  Use the colors in STRING to color the graph for -c.
+#                        STRING is a list of characters, each representing a
+#                        color. The colors will be used for each line in order,
+#                        repeating until all of the categories are exhausted.
+#                        Valid values are explained below.
+#   -h, --help           Display this help and exit
+#
+# Values for --sort=HOW:
+#  "std asc"
+#    use AWK's standard rules for comparison, ascending. this is the default
+#  "std desc"
+#    use AWK's standard rules for comparison, descending.
+#  "str asc"
+#    force comparison as strings, ascending.
+#  "str desc"
+#    force comparison as strings, descending.
+#  "num asc"
+#    force a numeric comparison, ascending.
+#  "num desc"
+#    force a numeric comparison, descending.
+#  "val asc"
+#    sort by value, instead of category, in the same manner as "num asc".
+#  "val desc"
+#    sort by value, instead of category, in the same manner as "num desc".
+#
+# Values for --colors:
+#  "B": black
+#  "r": red
+#  "g": green
+#  "y": yellow
+#  "b": blue
+#  "m": magenta
+#  "c": cyan
+#  "w": white
+#  "d": the default terminal color
+# For example, the default color string is "rgbyCm"
+
+# comparison function
+# compares "a" and "b" based on "how", returning 0 for false and 1 for true.
+# required for all of the qsort() functions below
+function __compare(a, b, how) {
+  # standard comparisons
+  if (how == "std asc") {
+    return a < b;
+  } else if (how == "std desc") {
+    return a > b;
+
+  # force string comps
+  } else if (how == "str asc") {
+    return "a" a < "a" b;
+  } else if (how == "str desc") {
+    return "a" a > "a" b;
+
+  # force numeric
+  } else if (how == "num asc") {
+    return +a < +b;
+  } else if (how == "num desc") {
+    return +a > +b;
+  }
+}
+
+# actual sorting function
+# sorts the values in "array" in-place, from indices "left" to "right", based
+# on the comparison mode "how" (see the qsort() description).
+# required for all of the qsort() functions below
+function __quicksort(array, left, right, how,    piv, mid, tmp) {
+  # return if array contains one element or less
+  if ((right - left) <= 0) {
+    return;
+  }
+
+  # choose random pivot
+  piv = int(rand() * (right - left + 1)) + left;
+
+  # swap left and pivot
+  tmp = array[piv];
+  array[piv] = array[left];
+  array[left] = tmp;
+  
+  mid = left;
+  # iterate over each element from the second to the last, and compare
+  for (piv=left+1; piv<=right; piv++) {
+    # if the comparison based on "how" is true...
+    if (__compare(array[piv], array[left], how)) {
+      # increment mid
+      mid++;
+
+      # swap mid and pivot
+      tmp = array[piv];
+      array[piv] = array[mid];
+      array[mid] = tmp;
+    }
+  }
+
+  # swap left and mid
+  tmp = array[mid];
+  array[mid] = array[left];
+  array[left] = tmp;
+  
+  # recursively sort the two halves
+  __quicksort(array, left, mid - 1, how);
+  __quicksort(array, mid + 1, right, how);
+}
+
+# actual sorting function for "val *" sorting
+function __quicksort_val(array, values, left, right, how,    piv, mid, tmp) {
+  # return if array contains one element or less
+  if ((right - left) <= 0) {
+    return;
+  }
+
+  # choose random pivot
+  piv = int(rand() * (right - left + 1)) + left;
+
+  # swap left and pivot
+  tmp = array[piv];
+  array[piv] = array[left];
+  array[left] = tmp;
+  tmp = values[piv];
+  values[piv] = values[left];
+  values[left] = tmp;
+  
+  mid = left;
+  # iterate over each element from the second to the last, and compare
+  for (piv=left+1; piv<=right; piv++) {
+    # if the comparison based on "how" is true...
+    if (__compare(values[piv], values[left], how)) {
+      # increment mid
+      mid++;
+
+      # swap mid and pivot
+      tmp = array[piv];
+      array[piv] = array[mid];
+      array[mid] = tmp;
+      tmp = values[piv];
+      values[piv] = values[mid];
+      values[mid] = tmp;
+    }
+  }
+
+  # swap left and mid
+  tmp = array[mid];
+  array[mid] = array[left];
+  array[left] = tmp;
+  tmp = values[mid];
+  values[mid] = values[left];
+  values[left] = tmp;
+  
+  # recursively sort the two halves
+  __quicksort_val(array, values, left, mid - 1, how);
+  __quicksort_val(array, values, mid + 1, right, how);
+}
+
+## usage: ceil(number)
+## returns "number" rounded UP to the nearest int
+function ceil(num) {
+  if (num < 0) {
+    return int(num);
+  } else {
+    return int(num) + (num == int(num) ? 0 : 1);
+  }
+}
+
+## usage: center(string [, width])
+## returns "string" centered based on "width". if "width" is not provided (or 
+## is 0), uses the width of the terminal, or 80 if standard output is not open
+## on a terminal.
+## note: does not check the length of the string. if it's wider than the
+## terminal, it will not center lines other than the first. for best results,
+## combine with fold() (see the cfold script in the examples directory for a
+## script that does exactly this)
+function center(str, cols,    off, cmd) {
+  if (!cols) {
+    # checks if stdout is a tty
+    if (system("test -t 1")) {
+      cols = 80;
+    } else {
+      cmd = "tput cols";
+      cmd | getline cols;
+      close(cmd);
+    }
+  }
+
+  off = int((cols/2) + (length(str)/2));
+
+  return sprintf("%*s", off, str);
+}
+
+# usage: check_when(when)
+# checks "when" for "always", "auto", or "never", and uses isatty() to check
+# if the standard output is open on a tty. returns 1 if the option should be
+# set, 0 if not, and -1 if "when" is invalid
+function check_when(when) {
+  if (when == "always") {
+    return 1;
+  } else if (when == "auto") {
+    if (isatty(1)) {
+      return 1;
+    } else {
+      return 0;
+    }
+  } else if (when == "never") {
+    return 0;
+  } else {
+    return -1
+  }
+}
+
+## usage: fold(string, sep [, width])
+## returns "string", wrapped, with lines broken on "sep" to "width" columns.
+## "sep" is a list of characters to break at, similar to IFS in a POSIX shell.
+## if "sep" is empty, wraps at exactly "width" characters. if "width" is not
+## provided (or is 0), uses the width of the terminal, or 80 if standard output
+## is not open on a terminal.
+## note: currently, tabs are squeezed to a single space. this will be fixed
+function fold(str, sep, cols,    out, cmd, i, len, chars, c, last, f, first) {
+  if (!cols) {
+    # checks if stdout is a tty
+    if (system("test -t 1")) {
+      cols = 80;
+    } else {
+      cmd = "tput cols";
+      cmd | getline cols;
+      close(cmd);
+    }
+  }
+
+  # squeeze tabs and newlines to spaces
+  gsub(/[\t\n]/, " ", str);
+
+  # if "sep" is empty, just fold on cols with substr
+  if (!length(sep)) {
+    len = length(str);
+
+    out = substr(str, 1, cols);
+    for (i=cols+1; i<=len; i+=cols) {
+      out = out "\n" substr(str, i, cols);
+    }
+
+    return out;
+
+  # otherwise, we have to loop over every character (can't split() on sep, it
+  # would destroy the existing separators)
+  } else {
+    # split string into char array
+    len = split(str, chars, "");
+    # set boolean, used to assign the first line differently
+    first = 1;
+
+    for (i=1; i<=len; i+=last) {
+      f = 0;
+      for (c=i+cols-1; c>=i; c--) {
+        if (index(sep, chars[c])) {
+          last = c - i + 1;
+          f = 1;
+          break;
+        }
+      }
+
+      if (!f) {
+        last = cols;
+      }
+
+      if (first) {
+        out = substr(str, i, last);
+        first = 0;
+      } else {
+        out = out "\n" substr(str, i, last);
+      }
+    }
+  }
+
+  # return the output
+  return out;
+}
+
+## usage: getopts(optstring [, longopt_array ])
+## Parses options, and deletes them from ARGV. "optstring" is of the form
+## "ab:c". Each letter is a possible option. If the letter is followed by a
+## colon (:), then the option requires an argument. If an argument is not
+## provided, or an invalid option is given, getopts will print the appropriate
+## error message and return "?". Returns each option as it's read, and -1 when
+## no options are left. "optind" will be set to the index of the next
+## non-option argument when finished. "optarg" will be set to the option's
+## argument, when provided. If not provided, "optarg" will be empty. "optname"
+## will be set to the current option, as provided. Getopts will delete each
+## option and argument that it successfully reads, so awk will be able to treat
+## whatever's left as filenames/assignments, as usual. If provided,
+## "longopt_array" is the name of an associative array that maps long options to
+## the appropriate short option (do not include the hyphens on either).
+## Sample usage can be found in the examples dir, with gawk extensions, or in
+## the ogrep script for a POSIX example: https://github.com/e36freak/ogrep
+function getopts(optstring, longarr,    opt, trimmed, hasarg, repeat) {
+  hasarg = repeat = 0;
+  optarg = "";
+  # increment optind
+  optind++;
+
+  # return -1 if the current arg is not an option or there are no args left
+  if (ARGV[optind] !~ /^-/ || optind >= ARGC) {
+    return -1;
+  }
+
+  # if option is "--" (end of options), delete arg and return -1
+  if (ARGV[optind] == "--") {
+    for (i=1; i<=optind; i++) {
+      delete ARGV[i];
+    }
+    return -1;
+  }
+
+  # if the option is a long argument...
+  if (ARGV[optind] ~ /^--/) {
+    # trim hyphens
+    trimmed = substr(ARGV[optind], 3);
+    # if of the format --foo=bar, split the two. assign "bar" to optarg and
+    # set hasarg to 1
+    if (trimmed ~ /.*=.*/) {
+      optarg = trimmed;
+      sub(/=.*/, "", trimmed); sub(/^[^=]*=/, "", optarg);
+      hasarg = 1;
+    }
+    
+    # invalid long opt
+    if (!(trimmed in longarr)) {
+      printf("unrecognized option -- '%s'\n", ARGV[optind]) > "/dev/stderr";
+      return "?";
+    }
+
+    opt = longarr[trimmed];
+    # set optname by prepending dashes to the trimmed argument
+    optname = "--" trimmed;
+
+  # otherwise, it is a short option
+  } else {
+    # remove the hyphen, and get just the option letter
+    opt = substr(ARGV[optind], 2, 1);
+    # set trimmed to whatevers left
+    trimmed = substr(ARGV[optind], 3);
+
+    # invalid option
+    if (!index(optstring, opt)) {
+      printf("invalid option -- '%s'\n", opt) > "/dev/stderr";
+      return "?";
+    }
+
+    # if there is more to the argument than just -o
+    if (length(trimmed)) {
+      # if option requires an argument, set the rest to optarg and hasarg to 1
+      if (index(optstring, opt ":")) {
+        optarg = trimmed;
+        hasarg = 1;
+
+      # otherwise, prepend a hyphen to the rest and set repeat to 1, so the
+      # same arg is processed again without the first option
+      } else {
+        ARGV[optind] = "-" trimmed;
+        repeat = 1;
+      }
+    }
+
+    # set optname by prepending a hypen to opt
+    optname = "-" opt;
+  }
+
+  # if the option requires an arg and hasarg is 0
+  if (index(optstring, opt ":") && !hasarg) {
+    # increment optind, check if no arguments are left
+    if (++optind >= ARGC) {
+      printf("option requires an argument -- '%s'\n", optname) > "/dev/stderr";
+      return "?";
+    }
+
+    # set optarg
+    optarg = ARGV[optind];
+
+  # if repeat is set, decrement optind so we process the same arg again
+  # mutually exclusive to needing an argument, otherwise hasarg would be set
+  } else if (repeat) {
+    optind--;
+  }
+
+  # delete all arguments up to this point, just to make sure
+  for (i=1; i<=optind; i++) {
+    delete ARGV[i];
+  }
+
+  # return the option letter
+  return opt;
+}
+
+## usage: isatty(fd)
+## Checks if "fd" is open on a tty. Returns 1 if so, 0 if not, and -1 if an
+## error occurs
+function isatty(fd) {
+  # make sure fd is an int
+  if (fd !~ /^[0-9]+$/) {
+    return -1;
+  }
+
+  # actually test
+  return !system("test -t " fd);
+}
+
+## usage: isint(string)
+## returns 1 if "string" is a valid integer, otherwise 0
+function isint(str) {
+  if (str !~ /^-?[0-9]+$/) {
+    return 0;
+  }
+
+  return 1;
+}
+
+## usage: qsorti(s, d [, how])
+## sorts the indices in the array "s" using awk's normal rules for comparing
+## values, creating a new sorted array "d" indexed with sequential integers
+## starting with 1, and with the values the indices of "s". returns the length,
+## or -1 if an error occurs.. leaves the source array "s" unchanged. the
+## optional string "how" controls the direction and the comparison mode. uses
+## the quick sort algorithm, with a random pivot to avoid worst-case behavior
+## on already sorted arrays. requires the __compare() and __quicksort() functions.
+## valid values for "how" are:
+##   "std asc"
+##     use awk's standard rules for comparison, ascending. this is the default
+##   "std desc"
+##     use awk's standard rules for comparison, descending.
+##   "str asc"
+##     force comparison as strings, ascending.
+##   "str desc"
+##     force comparison as strings, descending.
+##   "num asc"
+##     force a numeric comparison, ascending.
+##   "num desc"
+##     force a numeric comparison, descending.
+##   "val asc"
+##     force a numeric comparison of values, ascending.
+##   "val desc"
+##     force a numeric comparison of values, descending.
+function qsorti(array, out, how,    values, count, i) {
+  # make sure how is correct
+  if (length(how)) {
+    if (how !~ /^(st[rd]|num|val) (a|de)sc$/) {
+      return -1;
+    }
+
+  # how was not passed, use the default
+  } else {
+    how = "std asc";
+  }
+
+  # sort indexes by value
+  if (index(how, "val") == 1) {
+    # loop over each index, and generate two new arrays: the original indices
+    # mapped to numeric ones, and the values mapped to the same numbers
+    count = 0;
+    for (i in array) {
+      count++;
+      out[count] = i;
+      values[count] = array[i];
+    }
+
+    # seed the random number generator
+    srand();
+
+    # substitute "num" for "val" in "how"
+    sub(/val/, "num", how);
+
+    # actually sort
+    __quicksort_val(out, values, 1, count, how);
+
+  # normal index sorting behavior
+  } else {
+    # loop over each index, and generate a new array with the original indices
+    # mapped to new numeric ones
+    count = 0;
+    for (i in array) {
+      out[++count] = i;
+    }
+
+    # seed the random number generator
+    srand();
+
+    # actually sort
+    __quicksort(out, 1, count, how);
+  }
+
+  # return the length
+  return count;
+}
+
+## usage: rint(number)
+## returns "number" rounded to the nearest integer
+function rint(num,    n) {
+  if (num < 0) {
+    return (num - (n = int(num)) < -.5) ? n - 1 : n;
+  } else {
+    return (num - (n = int(num)) >= .5) ? n + 1 : n;
+  }
+}
+
+## usage: set_cols(array)
+##   sets the following values in "array" with tput. printing them will format
+##   any text afterwards. colors and formats are:
+##     bold - bold text (can be combined with a color)
+##     black - black text
+##     red - red text
+##     green - green text
+##     yellow - yellow text
+##     blue - blue text
+##     magenta - magenta text
+##     cyan - cyan text
+##     white - white text
+##     reset - resets to default settings
+function set_cols(array) {
+  # bold
+  cmd = "tput bold";
+  cmd | getline array["bold"];
+  close(cmd);
+  # black
+  cmd = "tput setaf 0";
+  cmd | getline array["black"];
+  close(cmd);
+  # red
+  cmd = "tput setaf 1";
+  cmd | getline array["red"];
+  close(cmd);
+  # green
+  cmd = "tput setaf 2";
+  cmd | getline array["green"];
+  close(cmd);
+  # yellow
+  cmd = "tput setaf 3";
+  cmd | getline array["yellow"];
+  close(cmd);
+  # blue
+  cmd = "tput setaf 4";
+  cmd | getline array["blue"];
+  close(cmd);
+  # magenta
+  cmd = "tput setaf 5";
+  cmd | getline array["magenta"];
+  close(cmd);
+  # cyan
+  cmd = "tput setaf 6";
+  cmd | getline array["cyan"];
+  close(cmd);
+  # white
+  cmd = "tput setaf 7";
+  cmd | getline array["white"];
+  close(cmd);
+  # reset
+  cmd = "tput sgr0";
+  cmd | getline array["reset"];
+  close(cmd);
+}
+
+## usage: trim(string)
+## returns "string" with leading and trailing whitespace trimmed
+function trim(str) {
+  gsub(/^[[:blank:]]+|[[:blank:]]+$/, "", str);
+
+  return str;
+}
+
+# prints usage information
+function usage() {
+  printf("%s\n\n%s\n\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+"Usage: bar_graph -- [OPTIONS] [FILE...]",
+"The '--' is required, so AWK itself doesn't read the options.",
+"Creates a bar graph of the categories and values in FILE(s) (or the standard",
+"input if no files are named, or if a single hyphen (-) is given), reading the",
+"first field as the category and the second as the value. If multiple lines",
+"with the same category exist, the values are added as each is encountered.",
+"Negative values will be treated as zero. The graph width is determined by the",
+"terminal width. If the standard input is not a terminal, and --width is not",
+"used, the default is 80 characters." \
+) > "/dev/stderr";
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+" Options:",
+"  -d, --delim PATT     Use the AWK style regular expression PATT as the field",
+"                       separator. If -d is not provided, non-blank to blank",
+"                       transitions are used. Works the same way as AWK's FS.",
+"  -t, --title TITLE    Add the title TITLE to the graph",
+"  -b, --bar STRING     Use STRING for the bars of the graph, instead of \"=\",",
+"                       by repeating it as needed. May use a partial value if",
+"                       STRING is not a single character",
+"  -n, --nums           Use the values (or percentages, if -p is used) as the",
+"                       final part of the bar",
+"  -p, --percent        Graph values as percentages of the largest (largest",
+"                       value being 100%)" \
+) > "/dev/stderr";
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+"  -P, --percent-tot    Graph values as percentages of the total",
+"  -s, --sort[=HOW]     Sort the categories, according to HOW, if provided. If",
+"                       not provided, the default is "std asc". Values for HOW",
+"                       are explained below",
+"  -i, --ignorecase     Ignore the case of the categories. The case used for",
+"                       the category in the graph will be that of the first",
+"                       encountered in the data",
+"  -w, --width WIDTH    Force a graph width of WIDTH. WIDTH is an integer >= 40",
+"  -S, --stty           Use \"stty size\" to determine the terminal width instead",
+"                       of \"tput cols\"" \
+) > "/dev/stderr";
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+"  -c, --color[=WHEN]   Use colored output. WHEN is always, auto, or never",
+"  -B, --bold[=WHEN]    Format the output using boldness. WHEN is always, auto,",
+"                       or never",
+"  -C, --colors STRING  Use the colors in STRING to color the graph for -c.",
+"                       STRING is a list of characters, each representing a",
+"                       color. The colors will be used for each line in order,",
+"                       repeating until all of the categories are exhausted.",
+"                       Valid values are explained below.",
+"  -h, --help           Display this help and exit" \
+) > "/dev/stderr";
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+"Values for HOW:",
+" \"std asc\"",
+"   use AWK's standard rules for comparison, ascending. this is the default",
+" \"std desc\"",
+"   use AWK's standard rules for comparison, descending.",
+" \"str asc\"",
+"   force comparison as strings, ascending.",
+" \"str desc\"",
+"   force comparison as strings, descending.",
+" \"num asc\"",
+"   force a numeric comparison, ascending.",
+" \"num desc\"",
+"   force a numeric comparison, descending.",
+" \"val asc\"",
+"   sort by value, instead of category, in the same manner as \"num asc\".",
+" \"val desc\"",
+"   sort by value, instead of category, in the same manner as \"num desc\"." \
+) > "/dev/stderr";
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+"Values for --colors:",
+" \"B\": black",
+" \"r\": red",
+" \"g\": green",
+" \"y\": yellow",
+" \"b\": blue",
+" \"m\": magenta",
+" \"c\": cyan",
+" \"w\": white",
+" \"d\": the default terminal color",
+"For example, the default color string is \"rgbycm\"" \
+) > "/dev/stderr";
+}
+
+BEGIN {
+  # initialize variables
+  title = sort_how = label = "";
+  barstr = "=";
+  width = 80;
+  colorstr = "rgbycm";
+  hastitle = shownums = useperc = perctotal = sort = icase = 0;
+  userwidth = stty = color = bold = err = toexit = 0;
+
+  # map long options to the corresponding short ones
+  longopts["delim"]       = "d";
+  longopts["title"]       = "t";
+  longopts["bar"]         = "b";
+  longopts["nums"]        = "n";
+  longopts["percent"]     = "p";
+  longopts["percent-tot"] = "P";
+  longopts["sort"]        = "s";
+  longopts["ignorecase"]  = "i";
+  longopts["width"]       = "w";
+  longopts["stty"]        = "S";
+  longopts["color"]       = "c";
+  longopts["bold"]        = "B";
+  longopts["colors"]      = "C";
+  longopts["help"]        = "h";
+
+  # parse the options
+  while ((opt = getopts("d:t:b:npPsiw:ScBC:h", longopts)) != -1) {
+    # -h, --help
+    if (opt == "h") {
+      usage(); toexit = 1; exit;
+
+    # -d, --delim PATT
+    } else if (opt == "d") {
+      FS = optarg;
+
+    # -t, --title TITLE
+    } else if (opt == "t") {
+      title = trim(optarg); hastitle = 1;
+
+    # -b, --bar STRING
+    } else if (opt == "b") {
+      barstr = optarg;
+
+    # -n, --nums
+    } else if (opt == "n") {
+      shownums = 1;
+
+    # -p, --percent
+    } else if (opt == "p") {
+      useperc = 1; perctotal = 0;
+
+    # -P, --percent-tot
+    } else if (opt == "P") {
+      perctotal = 1; useperc = 0;
+
+    # -s, --sort[=HOW]
+    } else if (opt == "s") {
+      # if HOW is provided:
+      if (length(optarg)) {
+        # validate HOW
+        if (optarg !~ /^(st[rd]|num|val) (a|de)sc$/) {
+          printf("invalid value for HOW: %s\n", optarg) > "/dev/stderr";
+          err = toexit = 1; exit;
+        }
+        sort_how = optarg;
+
+      # HOW was not provided
+      } else {
+        sort_how = "std asc";
+      }
+
+      sort = 1;
+
+    # -i, --ignorecase
+    } else if (opt == "i") {
+      icase = 1;
+
+    # -w, --width WIDTH
+    } else if (opt == "w") {
+      if (!isint(optarg)) { # || optarg < 40) {
+        printf("invalid value for WIDTH: %s\n", optarg) > "/dev/stderr";
+        err = toexit = 1; exit;
+      }
+      width = optarg; userwidth = 1;
+    
+    # -S, --stty
+    } else if (opt == "S") {
+      stty = 1;
+
+    # -c, --color[=WHEN]
+    } else if (opt == "c") {
+      if (length(optarg)) {
+        if ((color = check_when(optarg)) < 0) {
+          printf("invalid value for WHEN: %s\n", optarg) > "/dev/stderr";
+          err = toexit = 1; exit;
+        }
+      } else {
+        color = check_when("auto");
+      }
+
+    # -B, --bold[=WHEN]
+    } else if (opt == "B") {
+      if (length(optarg)) {
+        if ((bold = check_when(optarg)) < 0) {
+          printf("invalid value for WHEN: %s\n", optarg) > "/dev/stderr";
+          err = toexit = 1; exit;
+        }
+      } else {
+        bold = check_when("auto");
+      }
+
+    # -C, --colors STRING
+    } else if (opt == "C") {
+      colorstr = optarg;
+
+    # error
+    } else {
+      err = toexit = 1; exit;
+    }
+  }
+
+  # set colors and bold if needed
+  if (color || bold) {
+    # available colors
+    avail_colors["B"] = "black";
+    avail_colors["r"] = "red";
+    avail_colors["g"] = "green";
+    avail_colors["y"] = "yellow";
+    avail_colors["b"] = "blue";
+    avail_colors["m"] = "magenta";
+    avail_colors["c"] = "cyan";
+    avail_colors["w"] = "white";
+    avail_colors["d"] = "reset";
+
+    # set the colors to the "colors" array
+    set_cols(colors);
+
+    # split the color string into an array of chars
+    tot_colors = split(colorstr, usecolors, "");
+
+    # loop over each character
+    for (i=1; i<=tot_colors; i++) {
+      # invalid color character
+      if (!(usecolors[i] in avail_colors)) {
+        printf("invalid color character: %s\n", usecolors[i]) > "/dev/stderr";
+        err = toexit = 1; exit;
+      }
+
+      # create the array of colors
+      usecolors[i] = avail_colors[usecolors[i]];
+    }
+  }
+}
+
+
+# store values from each line
+{
+  # if case is to be ignored...
+  if (icase) {
+    category = trim(tolower($1)); # get the all-lower category
+
+    # if this category hasn't been seen yet, store the original cased version
+    if (!orig_seen[category]++) {
+      orig_cats[category] = trim($1);
+    }
+      
+  # case is not ignored, just trim
+  } else {
+    category = trim($1);
+  }
+
+  # if no sorting is to occur, store the original order that each is first seen
+  if (!sort && !order_seen[category]++) {
+    categories[++tot_cats] = category;
+  }
+
+  # actually add the values for the cats as we go
+  vals[category] += $2;
+
+  # add total for -P
+  if (perctotal) {
+    total += $2;
+  }
+}
+
+END {
+  # exit prematurely if needed
+  if (toexit) {
+    exit err;
+  }
+
+  # find the max length and value
+  maxI = length(label);
+  for (i in vals) {
+    if ((len = length(i)) > maxI) {
+      maxI = len;
+    }
+
+    if (vals[i] > maxL) {
+      maxL = vals[i];
+    }
+  }
+
+  # adjust values, if needed
+  if (useperc || perctotal || shownums) {
+    for (i in vals) {
+      if (useperc) {
+        vals[i] = sprintf("%.1f", (vals[i] / maxL) * 100);
+      } else if (perctotal) {
+        vals[i] = sprintf("%.1f", (vals[i] / total) * 100);
+      }
+
+      if (shownums) {
+        vals[i] = sprintf("%.1f", vals[i]);
+      }
+    }
+
+    if (useperc || perctotal) {
+      maxL = 100;
+    }
+  }
+
+  # set width, if --width wasn't provided
+  if (!userwidth) {
+    if (isatty(1)) {
+      if (stty) {
+        cmd = "stty size";
+        cmd | getline width;
+        sub(/.* /, "", width);
+
+      } else {
+        cmd = "tput cols";
+        cmd | getline width;
+      }
+
+      close(cmd);
+
+    # stdout is not a tty
+    } else {
+      width = 80;
+    }
+  }
+
+  # determine the divisor to fit the graph within the width
+  bar_width = width - (maxI + 2);
+  divisor = maxL / bar_width;
+
+  # print the title if it exists
+  if (hastitle) {
+    title = fold(title, " \t\n", width);
+    len = split(title, t, /\n/);
+
+    if (color || bold) {
+      printf("%s", colors["bold"]);
+    }
+    for (i=1; i<=len; i++) {
+      print center(trim(t[i]));
+    }
+    if (color || bold) {
+      printf("%s", colors["reset"]);
+    }
+
+    print "";
+  }
+
+  # if array is to be sorted, do so
+  if (sort) {
+    tot_cats = qsorti(vals, categories, sort_how);
+  }
+
+  # iterate over each category and print
+  for (i=1; i<=tot_cats; i++) {
+    # colors and bold
+    if (color) {
+      printf("%s", colors[usecolors[((i - 1) % tot_colors) + 1]]);
+    }
+    if (bold && !(i % 2)) {
+      printf("%s", colors["bold"]);
+    }
+
+    # print the category
+    printf("%*s ", maxI, icase ? orig_cats[categories[i]] : categories[i]);
+
+    if (color || bold) {
+      printf("%s", colors["reset"]);
+    }
+    printf("|");
+    if (color) {
+      printf("%s", colors[usecolors[((i - 1) % tot_colors) + 1]]);
+    }
+    if (bold && !(i % 2)) {
+      printf("%s", colors["bold"]);
+    }
+
+    # print bar for positive values
+    if (vals[categories[i]] > 0) {
+      # determine the length of the bar
+      if (shownums) {
+        bar_len = (rint(vals[categories[i]] / divisor) - \
+                   length(vals[categories[i]])) - 1;
+      } else {
+        bar_len = rint(vals[categories[i]] / divisor);
+      }
+
+      # determine the number of times the bar string is to be repeated
+      barstr_len = length(barstr);
+      repeats = int(bar_len / barstr_len);
+      remainder = bar_len % barstr_len;
+
+      # print the whole repeats of the bar string
+      for (j=1; j<=repeats; j++) {
+        printf("%s", barstr);
+      }
+
+      # if it's not evenly divisible, print the last partial part
+      if (remainder) {
+        printf("%s", substr(barstr, 1, remainder));
+      }
+
+      # if -n was used, print the numbers at the end
+      if (shownums) {
+        if (repeats || remainder) {
+          printf("|%s\n", vals[categories[i]]);
+        } else {
+          printf("%s\n", vals[categories[i]]);
+        }
+
+      # -n was not used, just terminate with a newline
+      } else {
+        print "";
+      }
+
+    # just print newline for values <= 0
+    } else {
+      print "";
+    }
+
+    if (color || bold) {
+      printf("%s", colors["reset"]);
+    }
+  }
+
+
+  # determine the amount of numbers to be displayed on the axis at the bottom
+  axis_max = sprintf("%.1f", maxL); # highest number on axis
+  axis_spacing = length(axis_max) + 2; # length of each number and spacing
+  scalecount = int(bar_width / axis_spacing); # amount of numbers to print
+  
+  # if the amount of numbers is higher than the actual highest number...
+  if (+scalecount > +axis_max) {
+    # use the highest number instead
+    scalecount = +axis_max;
+    axis_spacing = int(bar_width / scalecount);
+  }
+
+  # leftover space at the beginning
+  deadspace = bar_width % axis_spacing;
+
+  # figure out numbers to adjust those on the axis
+  axis_mult = (scalecount * axis_spacing) / bar_width;
+  axis_adj = axis_max * (1 - axis_mult);
+
+  # print axis at bottom
+  axis = sprintf("%*s", width, "-");
+  gsub(/ /, "-", axis);
+  print axis;
+
+  # print the dead space where the categories were
+  printf("%*s |", maxI, "");
+
+  # print the first number or deadspace  at the beginning, if needed
+  if (deadspace) {
+    if (deadspace > length(adj = sprintf("%.1f", axis_adj))) {
+      printf("%*.1f", deadspace, adj);
+    } else {
+      printf("%*s", deadspace, " ");
+    }
+  }
+
+  # loop over each number to be printed
+  for (i=1; i<=scalecount; i++) {
+    printf("%*.1f", axis_spacing, (((axis_max / scalecount) * axis_mult) * i) + axis_adj);
+  }
+
+  print "";
+}
+
+
+
+# Copyright Daniel Mills <dm@e36freak.com>
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to
+# deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+# IN THE SOFTWARE.
