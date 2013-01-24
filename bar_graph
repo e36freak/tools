@@ -634,7 +634,7 @@ function usage() {
 "  -p, --percent        Graph values as percentages of the largest (largest",
 "                       value being 100%)" \
 ) > "/dev/stderr";
-  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
 "  -P, --percent-tot    Graph values as percentages of the total",
 "  -s, --sort[=HOW]     Sort the categories, according to HOW, if provided. If",
 "                       not provided, the default is "std asc". Values for HOW",
