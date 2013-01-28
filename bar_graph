@@ -3,7 +3,7 @@
 # TODO:
 # --total?
 # option to turn scale on or off?
-# labels?
+# option to round to ints?
 
 # Usage: bar_graph -- [OPTIONS] [FILE...]
 #
@@ -18,36 +18,38 @@
 # used, the default is 80 characters.
 #
 #  Options:
-#   -d, --delim PATT     Use the AWK style regular expression PATT as the field
-#                        separator. If -d is not provided, non-blank to blank
-#                        transitions are used. Works the same way as AWK's FS.
-#   -t, --title TITLE    Add the title TITLE to the graph
-#   -b, --bar STRING     Use STRING for the bars of the graph, instead of "=",
-#                        by repeating it as needed. May use a partial value if
-#                        STRING is not a single character
-#   -n, --nums           Use the values (or percentages, if -p is used) as the
-#                        final part of the bar
-#   -p, --percent        Graph values as percentages of the largest (largest
-#                        value being 100%)
-#   -P, --percent-tot    Graph values as percentages of the total
-#   -s, --sort[=HOW]     Sort the categories, according to HOW, if provided. If
-#                        not provided, the default is "std asc". Values for HOW
-#                        are explained below
-#   -i, --ignorecase     Ignore the case of the categories. The case used for
-#                        the category in the graph will be that of the first
-#                        encountered in the data
-#   -w, --width WIDTH    Force a graph width of WIDTH. WIDTH is an integer >= 40
-#   -S, --stty           Use "stty size" to determine the terminal width instead
-#                        of "tput cols"
-#   -c, --color[=WHEN]   Use colored output. WHEN is always, auto, or never
-#   -B, --bold[=WHEN]    Format the output using boldness. WHEN is always, auto,
-#                        or never
-#   -C, --colors STRING  Use the colors in STRING to color the graph for -c.
-#                        STRING is a list of characters, each representing a
-#                        color. The colors will be used for each line in order,
-#                        repeating until all of the categories are exhausted.
-#                        Valid values are explained below.
-#   -h, --help           Display this help and exit
+#   -d, --delim PATT        Use the AWK style regular expression PATT as the
+#                           field separator, in the same manner of AWK's FS. If
+#                           -d is not provided, the default FS is used
+#   -t, --title TITLE       Add the title TITLE to the graph
+#   -b, --bar STRING        Use STRING for the bars of the graph, instead of
+#                           "=", repeating it as needed. May use a partial value
+#                           at the end if STRING is not a single character
+#   -n, --nums              Use the values (or percentages, if -p is used) as
+#                           the final part of the bar
+#   -p, --percent           Graph values as percentages of the largest (largest
+#                           value being 100%)
+#   -P, --percent-tot       Graph values as percentages of the total
+#   -s, --sort[=HOW]        Sort the categories, according to HOW, if provided.
+#                           If not provided, the default is "std asc". Values
+#                           for HOW are explained below
+#   -i, --ignorecase        Ignore the case of the categories. The case used for
+#                           the category in the graph will be that of the first
+#                           encountered in the data
+#   -w, --width WIDTH       Force a graph width of WIDTH. WIDTH is an int >= 40
+#   -l, --cat-label LABEL   Label the category axis with LABEL
+#   -v, --val-label LABEL   Label the value axis with LABEL
+#   -S, --stty              Use "stty size" to determine the terminal width
+#                           instead of "tput cols"
+#   -c, --color[=WHEN]      Use colored output. WHEN is always, auto, or never
+#   -B, --bold[=WHEN]       Format the output using boldness. WHEN is always,
+#                           auto, or never
+#   -C, --colors STRING     Use the colors in STRING to color the graph for -c.
+#                           STRING is a list of characters, each representing a
+#                           color. The colors will be used for each line in
+#                           order, repeating until all of the categories are
+#                           exhausted. Valid values are explained below.
+#   -h, --help              Display this help and exit
 #
 # Values for --sort=HOW:
 #  "std asc"
@@ -622,40 +624,42 @@ function usage() {
 ) > "/dev/stderr";
   printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
 " Options:",
-"  -d, --delim PATT     Use the AWK style regular expression PATT as the field",
-"                       separator. If -d is not provided, non-blank to blank",
-"                       transitions are used. Works the same way as AWK's FS.",
-"  -t, --title TITLE    Add the title TITLE to the graph",
-"  -b, --bar STRING     Use STRING for the bars of the graph, instead of \"=\",",
-"                       by repeating it as needed. May use a partial value if",
-"                       STRING is not a single character",
-"  -n, --nums           Use the values (or percentages, if -p is used) as the",
-"                       final part of the bar",
-"  -p, --percent        Graph values as percentages of the largest (largest",
-"                       value being 100%)" \
+"  -d, --delim PATT        Use the AWK style regular expression PATT as the",
+"                          field separator, in the same manner of AWK's FS. If",
+"                          -d is not provided, the default FS is used",
+"  -t, --title TITLE       Add the title TITLE to the graph",
+"  -b, --bar STRING        Use STRING for the bars of the graph, instead of",
+"                          \"=\", repeating it as needed. May use a partial value",
+"                          at the end if STRING is not a single character",
+"  -n, --nums              Use the values (or percentages, if -p is used) as",
+"                          the final part of the bar",
+"  -p, --percent           Graph values as percentages of the largest (largest",
+"                          value being 100%)" \
 ) > "/dev/stderr";
   printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
-"  -P, --percent-tot    Graph values as percentages of the total",
-"  -s, --sort[=HOW]     Sort the categories, according to HOW, if provided. If",
-"                       not provided, the default is "std asc". Values for HOW",
-"                       are explained below",
-"  -i, --ignorecase     Ignore the case of the categories. The case used for",
-"                       the category in the graph will be that of the first",
-"                       encountered in the data",
-"  -w, --width WIDTH    Force a graph width of WIDTH. WIDTH is an integer >= 40",
-"  -S, --stty           Use \"stty size\" to determine the terminal width instead",
-"                       of \"tput cols\"" \
+"  -P, --percent-tot       Graph values as percentages of the total",
+"  -s, --sort[=HOW]        Sort the categories, according to HOW, if provided.",
+"                          If not provided, the default is "std asc". Values",
+"                          for HOW are explained below",
+"  -i, --ignorecase        Ignore the case of the categories. The case used for",
+"                          the category in the graph will be that of the first",
+"                          encountered in the data",
+"  -w, --width WIDTH       Force a graph width of WIDTH. WIDTH is an int >= 40",
+"  -l, --cat-label LABEL   Label the category axis with LABEL",
+"  -v, --val-label LABEL   Label the value axis with LABEL" \
 ) > "/dev/stderr";
-  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
-"  -c, --color[=WHEN]   Use colored output. WHEN is always, auto, or never",
-"  -B, --bold[=WHEN]    Format the output using boldness. WHEN is always, auto,",
-"                       or never",
-"  -C, --colors STRING  Use the colors in STRING to color the graph for -c.",
-"                       STRING is a list of characters, each representing a",
-"                       color. The colors will be used for each line in order,",
-"                       repeating until all of the categories are exhausted.",
-"                       Valid values are explained below.",
-"  -h, --help           Display this help and exit" \
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
+"  -S, --stty              Use \"stty size\" to determine the terminal width",
+"                          instead of \"tput cols\"",
+"  -c, --color[=WHEN]      Use colored output. WHEN is always, auto, or never",
+"  -B, --bold[=WHEN]       Format the output using boldness. WHEN is always,",
+"                          auto, or never",
+"  -C, --colors STRING     Use the colors in STRING to color the graph for -c.",
+"                          STRING is a list of characters, each representing a",
+"                          color. The colors will be used for each line in",
+"                          order, repeating until all of the categories are",
+"                          exhausted. Valid values are explained below.",
+"  -h, --help              Display this help and exit" \
 ) > "/dev/stderr";
   printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n\n",
 "Values for HOW:",
@@ -693,12 +697,12 @@ function usage() {
 
 BEGIN {
   # initialize variables
-  title = sort_how = label = "";
+  title = sort_how = vlabel = clabel = "";
   barstr = "=";
   width = 80;
   colorstr = "rgbycm";
-  hastitle = shownums = useperc = perctotal = sort = icase = 0;
-  userwidth = stty = color = bold = err = toexit = 0;
+  hastitle = shownums = useperc = perctotal = sort = icase = userwidth = 0;
+  has_clabel = has_vlabel = stty = color = bold = err = toexit = 0;
 
   # map long options to the corresponding short ones
   longopts["delim"]       = "d";
@@ -710,6 +714,8 @@ BEGIN {
   longopts["sort"]        = "s";
   longopts["ignorecase"]  = "i";
   longopts["width"]       = "w";
+  longopts["cat-label"]   = "l";
+  longopts["val-label"]   = "v";
   longopts["stty"]        = "S";
   longopts["color"]       = "c";
   longopts["bold"]        = "B";
@@ -717,7 +723,7 @@ BEGIN {
   longopts["help"]        = "h";
 
   # parse the options
-  while ((opt = getopts("d:t:b:npPsiw:ScBC:h", longopts)) != -1) {
+  while ((opt = getopts("d:t:b:npPsiw:l:v:ScBC:h", longopts)) != -1) {
     # -h, --help
     if (opt == "h") {
       usage(); toexit = 1; exit;
@@ -776,6 +782,14 @@ BEGIN {
       }
       width = optarg; userwidth = 1;
     
+    # -l, --cat-label LABEL
+    } else if (opt == "l") {
+      clabel = optarg; has_clabel = 1;
+
+    # -v, --val-label LABEL
+    } else if (opt == "v") {
+      vlabel = optarg; has_vlabel = 1;
+
     # -S, --stty
     } else if (opt == "S") {
       stty = 1;
@@ -883,7 +897,6 @@ END {
   }
 
   # find the max length and value
-  maxI = length(label);
   for (i in vals) {
     if ((len = length(i)) > maxI) {
       maxI = len;
@@ -892,6 +905,9 @@ END {
     if (vals[i] > maxL) {
       maxL = vals[i];
     }
+  }
+  if (has_clabel) {
+    maxI += 2;
   }
 
   # adjust values, if needed
@@ -961,8 +977,39 @@ END {
     tot_cats = qsorti(vals, categories, sort_how);
   }
 
+  # determine the total height of the graph, sans title and vlabel
+  height = tot_cats + 2;
+
+  # if a category label was provided, figure out the difference in length
+  if (has_clabel) {
+    # if it's positive, print the excess first
+    if ((clabel_offset = (clabel_len = length(clabel)) - height) > 0) {
+      for (i=1; i<=clabel_offset; i++) {
+        print substr(clabel, i, 1);
+      }
+
+    # if it's negative, divide it by two to center the label
+    } else if (clabel_offset < -2) {
+      clabel_offset = int((clabel_offset + 2) / 2);
+    } else {
+      clabel_offset = 0;
+    }
+  }
+
   # iterate over each category and print
   for (i=1; i<=tot_cats; i++) {
+    # print the label, if needed
+    if (has_clabel) {
+      # if the current row has a part of the label, according to the offset
+      if ((o = i + clabel_offset) > 0 && o <= clabel_len) {
+        printf("%s ", substr(clabel, o, 1));
+
+      # otherwise, just print a space
+      } else {
+        printf("  ");
+      }
+    }
+
     # colors and bold
     if (color) {
       printf("%s", colors[usecolors[((i - 1) % tot_colors) + 1]]);
@@ -972,7 +1019,8 @@ END {
     }
 
     # print the category
-    printf("%*s ", maxI, icase ? orig_cats[categories[i]] : categories[i]);
+    printf("%*s ", maxI - has_clabel * 2,
+                   icase ? orig_cats[categories[i]] : categories[i]);
 
     if (color || bold) {
       printf("%s", colors["reset"]);
@@ -1054,12 +1102,26 @@ END {
   axis_adj = axis_max * (1 - axis_mult);
 
   # print axis at bottom
-  axis = sprintf("%*s", width, "-");
+  axis = sprintf("%*s", width - has_clabel * 2, "-");
   gsub(/ /, "-", axis);
+  if (has_clabel) {
+    if ((o = tot_cats + 1 + clabel_offset) > 0 && o <= clabel_len) {
+      printf("%s ", substr(clabel, o, 1));
+    } else {
+      printf("--");
+    }
+  }
   print axis;
 
   # print the dead space where the categories were
-  printf("%*s |", maxI, "");
+  if (has_clabel) {
+    if ((o = tot_cats + 2 + clabel_offset) > 0 && o <= clabel_len) {
+      printf("%s ", substr(clabel, o, 1));
+    } else {
+      printf("  ");
+    }
+  }
+  printf("%*s |", maxI - has_clabel * 2, "");
 
   # print the first number or deadspace  at the beginning, if needed
   if (deadspace) {
@@ -1076,6 +1138,16 @@ END {
   }
 
   print "";
+
+  # print the value label, if needed
+  if (has_vlabel) {
+    vlabel = fold(vlabel, " \t\n", width);
+    len = split(vlabel, v, /\n/);
+
+    for (i=1; i<=len; i++) {
+      print center(trim(v[i]));
+    }
+  }
 }
 
 
