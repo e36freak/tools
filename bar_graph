@@ -1,6 +1,7 @@
 #!/usr/bin/awk -f
 
 # TODO:
+# handle the printing of '|' for small numbers better
 # --total?
 # option to turn scale on or off?
 # option to round to ints?
