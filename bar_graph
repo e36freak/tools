@@ -1095,7 +1095,7 @@ END {
   }
 
   # leftover space at the beginning
-  deadspace = bar_width % axis_spacing;
+  deadspace = bar_width - (axis_spacing * scalecount);
 
   # figure out numbers to adjust those on the axis
   axis_mult = (scalecount * axis_spacing) / bar_width;
