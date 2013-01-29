@@ -1,7 +1,6 @@
 #!/usr/bin/awk -f
 
 # TODO:
-# handle the printing of '|' for small numbers better
 # --total?
 # option to turn scale on or off?
 # option to round to ints?
@@ -1037,11 +1036,11 @@ END {
     # print bar for positive values
     if (vals[categories[i]] > 0) {
       # determine the length of the bar
+      full_len = rint(vals[categories[i]] / divisor);
       if (shownums) {
-        bar_len = (rint(vals[categories[i]] / divisor) - \
-                   length(vals[categories[i]])) - 1;
+        bar_len = full_len - length(vals[categories[i]]) - 1;
       } else {
-        bar_len = rint(vals[categories[i]] / divisor);
+        bar_len = full_len;
       }
 
       # determine the number of times the bar string is to be repeated
@@ -1061,7 +1060,7 @@ END {
 
       # if -n was used, print the numbers at the end
       if (shownums) {
-        if (repeats || remainder) {
+        if (full_len > length(vals[categories[i]])) {
           printf("|%s\n", vals[categories[i]]);
         } else {
           printf("%s\n", vals[categories[i]]);
