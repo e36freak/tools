@@ -151,7 +151,7 @@ function usage() {
 "usage: nsplit -- [OPTIONS] [FILE ...]",
 "The '--' is required, so AWK itself doesn't read the options",
 "Split FILE (stdin if not provided) into fixed-sized pieces of PREFIXn; default",
-"size is 1000 lines, and default PREFIX is "out". "n" is a number, starting with",
+"size is 1000 lines, and default PREFIX is \"out\". \"n\" is a number, starting with",
 "0.") > "/dev/stderr";
   printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
 " Options:",
