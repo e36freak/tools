@@ -989,7 +989,7 @@ END {
       }
 
     # if it's negative, divide it by two to center the label
-    } else if (clabel_offset < -2) {
+    } else if (clabel_offset <= -2) {
       clabel_offset = int((clabel_offset + 2) / 2);
     } else {
       clabel_offset = 0;
