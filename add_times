@@ -154,7 +154,13 @@ while (($#)); do
       done
       ;;
     --?*=*) options+=("${1%%=*}" "${1#*=}");;
-    --) options+=(--endopts);;
+    # end of options, stop breaking them up
+    --)
+      options+=(--endopts)
+      shift
+      options+=("$@")
+      break
+      ;;
     *) options+=("$1");;
   esac
 
@@ -170,7 +176,7 @@ while [[ $1 = -?* ]]; do
     -s|--seconds) seconds=1;;
     -S|--subtract) oper=sub;;
     --endopts) shift; break;;
-    *) die "invalid option: $1";;
+    *) printf 'invalid option: %s\n' "$1" >&2; exit 1;;
   esac
 
   shift
