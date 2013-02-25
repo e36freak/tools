@@ -38,6 +38,9 @@ lessopen:
   less to read archives, pdfs (with pdftotext), and will use lynx -dump for html
   to use it, set LESSOPEN='|lessopen %s'
 
+merge:
+  Merge sorted FILEs into one, and print the result to the standard output.
+
 mycp:
   copies files. instead of erring or overwriting, appends numbers to dups
   (work in progress)
