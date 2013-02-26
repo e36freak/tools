@@ -859,6 +859,9 @@ END {
     for (f=1; f<=tmpcount; f++) {
       if (!finished[f]) {
         cur_lines[++len] = lines[f];
+        # use the line as the index, to track which file it came from
+        files_tmp[lines[f]] = f;
+                            
 
         # make sure there is at least one file left
         unfinished = 1;
@@ -876,22 +879,13 @@ END {
     # print the first element in the sorted array
     print cur_lines[1];
 
-    # figure out which file that element came from
-    for (f=1; f<=tmpcount; f++) {
-      if (lines[f] == cur_lines[1]) {
-        first_file = f;
-
-        break;
-      }
-    }
-
-    # get the next line from that file
-    if ((getline < temps[first_file]) > 0) {
-      lines[first_file] = $0;
+    # get the next line from the file the first element came from
+    if ((getline < temps[files_tmp[cur_lines[1]]]) > 0) {
+      lines[files_tmp[cur_lines[1]]] = $0;
 
     # no more lines for that file
     } else {
-      finished[first_file] = 1;
+      finished[files_tmp[cur_lines[1]]] = 1;
     }
   }
 
