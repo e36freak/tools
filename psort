@@ -691,6 +691,7 @@ BEGIN {
   # initialize default variables
   toexit = err = 0;
   p = k = stable = count = tmpcount = 0;
+  buff_max = 50000; # maximum number of lines to buffer
 
   # default global sorting options
   options["g"] = 1; # generic sort
@@ -796,8 +797,8 @@ BEGIN {
   lines[++count] = $0;
 }
 
-# on every 1000th line
-!(NR%1000) {
+# on every "break"th line
+!(NR % buff_max) {
   # sort what's currently in the buffer
   outlen = mainsort(lines, count, patts, p, !!k);
   
