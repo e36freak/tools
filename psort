@@ -20,7 +20,7 @@
 #  - Values both matching the same REGEX will be sorted against each other as
 #    strings, as usual.
 #  - All other values will be sorted as strings, in ascending order.
-#  - Uses the quicksort algorithm.
+#  - Uses the quicksort algorithm, combined with mergesort for large inputs.
 #  - Prints the result to the standard output.
 #
 #  Options:
@@ -60,7 +60,6 @@
 
 # TODO:
 #   add -z (not sure if this can be done POSIXly)
-#   use temp files to allow larger inputs
 
 
 
@@ -434,6 +433,106 @@ function mainsort(arr, alen, patts, plen, keynum,
   return o;
 }
 
+## usage: mktemp(template [, type])
+## creates a temporary file or directory, safely, and returns its name.
+## if template is not a pathname, the file will be created in ENVIRON["TMPDIR"]
+## if set, otherwise /tmp. the last six characters of template must be "XXXXXX",
+## and these are replaced with a string that makes the filename unique. type, if
+## supplied, is either "f", "d", or "u": for file, directory, or dry run (just
+## returns the name, doesn't create a file), respectively. If template is not
+## provided, uses "tmp.XXXXXX". Files are created u+rw, and directories u+rwx,
+## minus umask restrictions. returns -1 if an error occurs.
+function mktemp(template, type,
+                c, chars, len, dir, dir_esc, rstring, i, out, out_esc, umask,
+                cmd) {
+  # portable filename characters
+  c = "012345689ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  len = split(c, chars, "");
+
+  # make sure template is valid
+  if (length(template)) {
+    if (template !~ /XXXXXX$/) {
+      return -1;
+    }
+
+  # template was not supplied, use the default
+  } else {
+    template = "tmp.XXXXXX";
+  }
+
+  # make sure type is valid
+  if (length(type)) {
+    if (type !~ /^[fdu]$/) {
+      return -1;
+    }
+
+  # type was not supplied, use the default
+  } else {
+    type = "f";
+  }
+
+  # if template is a path...
+  if (template ~ /\//) {
+    dir = template;
+    sub(/\/[^/]*$/, "", dir);
+    sub(/.*\//, "", template);
+
+  # template is not a path, determine base dir
+  } else {
+    if (length(ENVIRON["TMPDIR"])) {
+      dir = ENVIRON["TMPDIR"];
+    } else {
+      dir = "/tmp";
+    }
+  }
+
+  # escape dir for shell commands
+  esc_dir = dir;
+  sub(/'/, "'\\''", esc_dir);
+  esc_dir = "'" esc_dir "'";
+
+  # if this is not a dry run, make sure the dir exists
+  if (type != "u" && system("test -d " esc_dir)) {
+    return -1;
+  }
+
+  # get the base of the template, sans Xs
+  template = substr(template, 0, length(template) - 6);
+  
+  # generate the filename
+  do {
+    rstring = "";
+    for (i=0; i<6; i++) {
+      c = chars[int(rand() * len) + 1];
+      rstring = rstring c;
+    }
+    
+    out_esc = out = dir "/" template rstring;
+    sub(/'/, "'\\''", out_esc);
+    out_esc = "'" out_esc "'";
+  } while (!system("test -e " out_esc));
+
+  # if needed, create the filename
+  if (type == "f") {
+    system("touch " out_esc);
+    cmd = "umask";
+    cmd | getline umask;
+    close(cmd);
+    umask = substr(umask, 2, 1);
+    system("chmod 0" 6 - umask "00 " out_esc);
+  } else if (type == "d") {
+    system("mkdir " out_esc);
+    cmd = "umask";
+    cmd | getline umask;
+    close(cmd);
+    umask = substr(umask, 2, 1);
+    system("chmod 0" 7 - umask "00 " out_esc);
+  }
+
+  # return the filename
+  return out;
+}
+
 # usage: parsekey(key, a)
 # Validates "key", and parses the start, stop, and opts portions from it and
 # assigns them to the array "a". the start portion will be in a[1], stop in
@@ -551,10 +650,10 @@ function usage() {
 " - Values both matching the same REGEX will be sorted against each other as",
 "   strings, as usual.",
 " - All other values will be sorted as strings, in ascending order.",
-" - Uses the quicksort algorithm.",
+" - Uses the quicksort algorithm, combined with mergesort for large inputs.",
 " - Prints the result to the standard output." \
 ) > "/dev/stderr";
-  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
 " Options:",
 "  -p, --patt REGEX   Sort values matching REGEX higher than other values,",
 "                     according to the rules above. Can be supplied multiple",
@@ -598,7 +697,7 @@ function usage() {
 BEGIN {
   # initialize default variables
   toexit = err = 0;
-  p = k = stable = 0;
+  p = k = stable = count = tmpcount = 0;
 
   # default global sorting options
   options["g"] = 1; # generic sort
@@ -701,7 +800,25 @@ BEGIN {
 
 # read each line into an array
 {
-  lines[NR] = $0;
+  lines[++count] = $0;
+}
+
+# on every 1000th line
+!(NR%1000) {
+  # sort what's currently in the buffer
+  outlen = mainsort(lines, count, patts, p, !!k);
+  
+  # create a temp file
+  temps[++tmpcount] = mktemp("psort.XXXXXX");
+
+  # write the sorted lines to the temp file
+  for (i=1; i<=outlen; i++) {
+    print lines[i] > temps[tmpcount];
+  }
+  close(temps[tmpcount]);
+
+  # reset the line count
+  count = 0;
 }
 
 END {
@@ -710,13 +827,82 @@ END {
     exit err;
   }
 
-  # sort the array, starting with the first key if given
-  outlen = mainsort(lines, NR, patts, p, !!k);
+  # sort what's currently in the buffer
+  outlen = mainsort(lines, count, patts, p, !!k);
 
-  # dump the sorted array
-  for (i=1; i<=outlen; i++) {
-    print lines[i];
+  # if no temp file has been created, just dump the buffer and exit
+  if (!tmpcount) {
+    for (i=1; i<=outlen; i++) {
+      print lines[i];
+    }
+
+    exit err;
   }
+  
+  # if temp files have been created, merge them
+  # write the last buffer to a temp file
+  temps[++tmpcount] = mktemp("psort.XXXXXX");
+  for (i=1; i<=outlen; i++) {
+    print lines[i] > temps[tmpcount];
+  }
+  close(temps[tmpcount]);
+
+  # get initial lines
+  for (f=1; f<=tmpcount; f++) {
+    if ((getline < temps[f]) > 0) {
+      lines[f] = $0;
+
+    # no lines left in the current file
+    } else {
+      finished[f] = 1;
+    }
+  }
+
+  # loop continuously
+  while (1) {
+    # loop over each input file, and create a temp array
+    unfinished = 0;
+    len = 0;
+    for (f=1; f<=tmpcount; f++) {
+      if (!finished[f]) {
+        cur_lines[++len] = lines[f];
+
+        # make sure there is at least one file left
+        unfinished = 1;
+      }
+    }
+
+    # if there are no lines left in any file, break the loop
+    if (!unfinished) {
+      break;
+    }
+
+    # sort the temp array
+    cur_len = mainsort(cur_lines, len, patts, p, !!k);
+
+    # print the first element in the sorted array
+    print cur_lines[1];
+
+    # figure out which file that element came from
+    for (f=1; f<=tmpcount; f++) {
+      if (lines[f] == cur_lines[1]) {
+        first_file = f;
+
+        break;
+      }
+    }
+
+    # get the next line from that file
+    if ((getline < temps[first_file]) > 0) {
+      lines[first_file] = $0;
+
+    # no more lines for that file
+    } else {
+      finished[first_file] = 1;
+    }
+  }
+
+  exit err;
 }
 
 
