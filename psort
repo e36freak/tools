@@ -797,7 +797,7 @@ BEGIN {
   lines[++count] = $0;
 }
 
-# on every "break"th line
+# when we hit the number of maximum lines to buffer
 !(NR % buff_max) {
   # sort what's currently in the buffer
   outlen = mainsort(lines, count, patts, p, !!k);
