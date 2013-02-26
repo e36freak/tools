@@ -53,10 +53,6 @@
 #  psort -- -p '^foo' -p '^bar' myfile.txt
 #    This will sort 'myfile.txt', with all values matching '^foo' first,
 #    followed by all values matching '^bar', followed by everything else.
-#
-# Note:
-#  The algorithm used requires a large amount of memory, so this may not be the
-#  best tool to use on very large inputs.
 
 # TODO:
 #   add -z (not sure if this can be done POSIXly)
@@ -675,7 +671,7 @@ function usage() {
 "  -s, --stable       Stabilize sort by disabling last-resort comparison.",
 "  -h, --help         Display this help and exit." \
 ) > "/dev/stderr";
-  printf("%s\n%s\n%s\n%s\n%s\n%s\n\n%s\n%s\n%s\n%s\n\n%s\n%s\n%s\n",
+  printf("%s\n%s\n%s\n%s\n%s\n%s\n\n%s\n%s\n%s\n%s\n",
 "KEYDEF Definition:",
 " KEYDEF is F[,F][OPTS], for start and stop position, where F is a field number",
 " with origin 1. The stop position defaults to the line's end. OPTS is one or",
@@ -685,10 +681,7 @@ function usage() {
 "Example Usage:",
 " psort -- -p '^foo' -p '^bar' myfile.txt",
 "   This will sort 'myfile.txt', with all values matching '^foo' first,",
-"   followed by all values matching '^bar', followed by everything else.",
-"Note:",
-" The algorithm used requires a large amount of memory, so this may not be the",
-" best tool to use on very large inputs." \
+"   followed by all values matching '^bar', followed by everything else." \
 ) > "/dev/stderr";
 }
 
