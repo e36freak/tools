@@ -1,4 +1,4 @@
-#!/usr/bin/gawk -f
+#!/usr/bin/awk -f
 
 # usage: sub -- [OPTIONS] SEARCH REPLACE [FILE(s)]
 #        sub -- [OPTIONS] -f PATTERN_FILE [FILE(s)]
@@ -33,9 +33,6 @@
 # SEARCH strings must be non-empty, but REPLACE strings may be empty to replace
 # SEARCH with nothing. (note that an argument (or line with -f) is still
 # required, but it may be the empty string)
-
-# TODO:
-#  rewrite for POSIX
 
 
 
@@ -213,6 +210,106 @@ function glsub(str, rep, val,    out, len, i, a, l) {
   return out val;
 }
 
+## usage: mktemp(template [, type])
+## creates a temporary file or directory, safely, and returns its name.
+## if template is not a pathname, the file will be created in ENVIRON["TMPDIR"]
+## if set, otherwise /tmp. the last six characters of template must be "XXXXXX",
+## and these are replaced with a string that makes the filename unique. type, if
+## supplied, is either "f", "d", or "u": for file, directory, or dry run (just
+## returns the name, doesn't create a file), respectively. If template is not
+## provided, uses "tmp.XXXXXX". Files are created u+rw, and directories u+rwx,
+## minus umask restrictions. returns -1 if an error occurs.
+function mktemp(template, type,
+                c, chars, len, dir, dir_esc, rstring, i, out, out_esc, umask,
+                cmd) {
+  # portable filename characters
+  c = "012345689ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  len = split(c, chars, "");
+
+  # make sure template is valid
+  if (length(template)) {
+    if (template !~ /XXXXXX$/) {
+      return -1;
+    }
+
+  # template was not supplied, use the default
+  } else {
+    template = "tmp.XXXXXX";
+  }
+
+  # make sure type is valid
+  if (length(type)) {
+    if (type !~ /^[fdu]$/) {
+      return -1;
+    }
+
+  # type was not supplied, use the default
+  } else {
+    type = "f";
+  }
+
+  # if template is a path...
+  if (template ~ /\//) {
+    dir = template;
+    sub(/\/[^/]*$/, "", dir);
+    sub(/.*\//, "", template);
+
+  # template is not a path, determine base dir
+  } else {
+    if (length(ENVIRON["TMPDIR"])) {
+      dir = ENVIRON["TMPDIR"];
+    } else {
+      dir = "/tmp";
+    }
+  }
+
+  # escape dir for shell commands
+  esc_dir = dir;
+  sub(/'/, "'\\''", esc_dir);
+  esc_dir = "'" esc_dir "'";
+
+  # if this is not a dry run, make sure the dir exists
+  if (type != "u" && system("test -d " esc_dir)) {
+    return -1;
+  }
+
+  # get the base of the template, sans Xs
+  template = substr(template, 0, length(template) - 6);
+  
+  # generate the filename
+  do {
+    rstring = "";
+    for (i=0; i<6; i++) {
+      c = chars[int(rand() * len) + 1];
+      rstring = rstring c;
+    }
+    
+    out_esc = out = dir "/" template rstring;
+    sub(/'/, "'\\''", out_esc);
+    out_esc = "'" out_esc "'";
+  } while (!system("test -e " out_esc));
+
+  # if needed, create the filename
+  if (type == "f") {
+    system("touch " out_esc);
+    cmd = "umask";
+    cmd | getline umask;
+    close(cmd);
+    umask = substr(umask, 2, 1);
+    system("chmod 0" 6 - umask "00 " out_esc);
+  } else if (type == "d") {
+    system("mkdir " out_esc);
+    cmd = "umask";
+    cmd | getline umask;
+    close(cmd);
+    umask = substr(umask, 2, 1);
+    system("chmod 0" 7 - umask "00 " out_esc);
+  }
+
+  # return the filename
+  return out;
+}
+
 ## usage: shell_esc(string)
 ## returns the string escaped so that it can be used in a shell command
 function shell_esc(str) {
@@ -260,7 +357,8 @@ function usage() {
 
 BEGIN {
   # initialize variables to defaults
-  err = global = in_place = has_patts = patterns = patts_from_stdin = 0;
+  err = has_tmp = 0;
+  global = in_place = has_patts = patterns = patts_from_stdin = 0;
 
   # map long options to short options
   longopts["file"]     = "f";
@@ -270,55 +368,53 @@ BEGIN {
 
   # parse options
   while ((opt = getopts("f:gih", longopts)) != -1) {
-    switch(opt) {
-      # -f, --file
-      case "f":
-        # if FILE is '-', patterns are coming from stdin
-        if (optarg = "-") {
-          patts_from_stdin = 1;
+    # -f, --file
+    if (opt == "f") {
+      # if FILE is '-', patterns are coming from stdin
+      if (optarg = "-") {
+        patts_from_stdin = 1;
 
-        # otherwise, check to make sure it is a file or fifo and is readable
-        } else {
-          file = shell_esc(optarg);
-          if ((system("test -f " file) && system("test -p " file)) ||
-               system("test -r " file)) {
-            printf("%s: permission denied\n", optarg) > "/dev/stderr";
-            err = 1; exit;
-          }
+      # otherwise, check to make sure it is a file or fifo and is readable
+      } else {
+        file = shell_esc(optarg);
+        if ((system("test -f " file) && system("test -p " file)) ||
+             system("test -r " file)) {
+          printf("%s: permission denied\n", optarg) > "/dev/stderr";
+          err = 1; exit;
+        }
+      }
+
+      # read in each pair of lines from FILE, add to array
+      while ((getline search < optarg) > 0 && (getline rep < optarg) > 0) {
+        # search string may not be empty
+        if (!length(search)) {
+          continue;
         }
 
-        # read in each pair of lines from FILE, add to array
-        while ((getline search < optarg) > 0 && (getline rep < optarg) > 0) {
-          # search string may not be empty
-          if (!length(search)) {
-            continue;
-          }
+        patterns++;
+        searches[patterns] = search;
+        replaces[patterns] = search;
+      }
 
-          patterns++;
-          searches[patterns] = search;
-          replaces[patterns] = search;
-        }
+      # do not use the positional parameters for the patterns
+      has_patts = 1;
+      break;
 
-        # do not use the positional parameters for the patterns
-        has_patts = 1;
-        break;
+    # -g, --global
+    } else if (opt == "g") {
+      global = 1; break;
 
-      # -g, --global
-      case "g":
-        global = 1; break;
+    # -i, --in-place
+    } else if (opt == "i") {
+      in_place = 1; break;
 
-      # -i, --in-place
-      case "i":
-        in_place = 1; break;
+    # -h, --help
+    } else if (opt == "h") {
+      usage(); exit;
 
-      # -h, --help
-      case "h":
-        usage(); exit;
-
-      # error
-      case "?":
-      default:
-        err = 1; exit;
+    # error
+    } else {
+      err = 1; exit;
     }
   }
 
@@ -357,16 +453,19 @@ BEGIN {
   }
 }
 
-# before reading each input file, if -i was passed, create a temp file
-BEGINFILE {
-  if (in_place) {
-    cmd = "mktemp";
-    cmd | getline tmp;
-    close(cmd);
-
-    # add temp file name to the temps array
-    temps[tmp];
+# before reading each input file, if -i was passed...
+FNR == 1 && in_place {
+  # if it's not the first file, overwrite the previous file with its temp file
+  if (has_tmp) {
+    close(tmp);
+    system("mv " shell_esc(tmp) " " shell_esc(FILENAME));
   }
+
+  # create temp file and add temp file name to the temps array
+  tmp = mktemp();
+  temps[tmp];
+
+  has_tmp = 1;
 }
 
 # actually do the substitutions
@@ -389,18 +488,16 @@ BEGINFILE {
   }
 }
 
-# after reading each file, if -i was passed, overwrite the original with
-# the temp
-ENDFILE {
-  if (in_place) {
-    close(tmp);
-    system("mv " shell_esc(tmp) " " shell_esc(FILENAME));
-  }
-}
-
+# clean up on exit, and exit according to "err"
 END {
-  # clean up on exit, and exit according to "err"
-  if (in_place) {
+  if (has_tmp) {
+    # if -i was used, overwrite the last file with its temp file
+    if (in_place) {
+      close(tmp);
+      system("mv " shell_esc(tmp) " " shell_esc(FILENAME));
+    }
+
+    # clean up any remaining temp files
     for (tmp in temps) {
       system("rm -f " shell_esc(tmp));
     }
