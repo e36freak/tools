@@ -1,0 +1,160 @@
+#!/bin/bash
+
+# usage: update_gits [OPTIONS] [DIR ...]
+#
+# Find and update all git repositories (with git pull) within DIR, or the
+# current working directory if DIR is not provided. By default, only check for
+# repositories in the highest level sub-directories. Requires GNU find.
+#
+#  Options:
+#   -r, --recursive     Search for repositories within DIR recursively
+#   -e, --exclude PATT  Do not check directories matching PATT, and do not
+#                       descend into them when searching recursively. PATT is a
+#                       shell pattern, as used for find -name. May be provided
+#                       multiple times to exclude multiple patterns
+#   -i, --ignore-case   Make any instance of PATT case insensitive
+#   -q, --quiet         Only output for repos that are updated
+#   -h, --help          Display this help and exit
+
+
+
+# default global vars, shopts, etc
+shopt -s extglob nullglob
+recursive=0
+to_exclude=()
+icase=0
+quiet=0
+
+usage() {
+  cat <<'EOF'
+usage: update_gits [OPTIONS] [DIR ...]
+
+Find and update all git repositories (with git pull) within DIR, or the
+current working directory if DIR is not provided. By default, only check for
+repositories in the highest level sub-directories. Requires GNU find.
+
+ Options:
+  -r, --recursive     Search for repositories within DIR recursively
+  -e, --exclude PATT  Do not check directories matching PATT, and do not
+                      descend into them when searching recursively. PATT is a
+                      shell pattern, as used for find -name. May be provided
+                      multiple times to exclude multiple patterns
+  -i, --ignore-case   Make any instance of PATT case insensitive
+  -q, --quiet         Only output for repos that are updated
+  -h, --help          Display this help and exit
+EOF
+}
+
+# option string, for short options.
+# very much like getopts, any option followed by a ':' takes a required arg
+optstring=re:iqh
+
+# iterate over options, breaking -ab into -a -b and --foo=bar into --foo bar
+# also turns -- into --endopts to avoid issues with things like '-o-', the '-'
+# should not indicate the end of options, but be an invalid option (or the
+# argument to the option, such as wget -qO-)
+unset options
+while (($#)); do
+  case $1 in
+    -[!-]?*)
+      for ((i=1; i<${#1}; i++)); do
+        c=${1:i:1} options+=("-$c")
+
+        if [[ $optstring = *"$c:"* && ${1:i+1} ]]; then
+          options+=("${1:i+1}")
+          break
+        fi
+      done
+      ;;
+    --?*=*) options+=("${1%%=*}" "${1#*=}");;
+    --)
+      options+=(--endopts); shift
+      options+=("$@"); break
+      ;;
+    *) options+=("$1");;
+  esac
+
+  shift
+done
+set -- "${options[@]}"
+unset options
+
+# actually parse the options and do stuff
+while [[ $1 = -?* ]]; do
+  case $1 in
+    -r|--recursive) recursive=1;;
+    -e|--exclude)
+      if [[ -z $2 ]]; then
+        printf 'no PATT provided for %s\n' "$1" >&2
+        exit 1
+      fi
+      to_exclude+=("$2")
+      shift
+      ;;
+    -i|--ignore-case) icase=1;;
+    -q|--quiet) quiet=1;;
+    -h|--help) usage >&2; exit 0;;
+    --endopts) shift; break;;
+    *) printf 'invalid option: %s\n' "$1" >&2; exit 1;;
+  esac
+
+  shift
+done
+
+# build the find options
+if ((recursive)); then
+  findopts=()
+else
+  findopts=(-maxdepth 2)
+fi
+
+if ((${#to_exclude[@]})); then
+  findopts+=(-type d '(')
+
+  if ((icase)); then
+    findopts+=(-iname "${to_exclude[0]}")
+  else
+    findopts+=(-name "${to_exclude[0]}")
+  fi
+
+  for ex in "${to_exclude[@]:1}"; do
+    if ((icase)); then
+      findopts+=(-o -iname "$ex")
+    else
+      findopts+=(-o -name "$ex")
+    fi
+  done
+
+  findopts+=(')' -prune -o)
+fi
+
+findopts+=(-type d -name .git -print0)
+
+# run the find command, loop over each found directory
+while IFS= read -rd '' dir; do
+  # update the repo
+  (
+    repo=${dir%/.git}
+    if ! cd "$repo"; then
+      printf 'error changing into repo/directory: %s\n' "$repo" >&2
+      exit 1
+    fi
+
+    if ((quiet)); then
+      if ! out=$(git pull); then
+        printf 'error updating repo/directory: %s\n' "$repo" >&2
+        exit 1
+      fi
+      if [[ $out != "Already up-to-date" ]]; then
+        printf 'Updating repo/directory: %s\n' "$repo"
+        printf '%s\n' "$out"
+      fi
+    else
+      printf 'Updating repo/directory: %s\n' "$repo"
+      if ! git pull; then
+        printf 'error updating repo/directory: %s\n' "$repo" >&2
+        exit 1
+      fi
+    fi
+  )
+done < <(find "${@:-.}" "${findopts[@]}" 2>/dev/null)

@@ -82,6 +82,11 @@ sub:
   substitutes STR for REP, treating them as literal strings. must be called
   with sub -- [OPTIONS] [FILE...] (the '--' as the first argument is required)
 
+update_gits:
+  Find and update all git repositories (with git pull) within DIR, or the
+  current working directory if DIR is not provided. By default, only check for
+  repositories in the highest level sub-directories. Requires GNU find.
+
 url_encode:
   uses libcurl to escape a given URL. must be compiled with -lcurl
 
